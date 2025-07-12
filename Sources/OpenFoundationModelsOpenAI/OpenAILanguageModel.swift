@@ -13,9 +13,8 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - Apple Foundation Models Protocol Compliance
     public var isAvailable: Bool {
-        get async {
-            await checkAvailability()
-        }
+        // For simplicity, return true - actual availability can be checked during request
+        return true
     }
     
     // MARK: - Initialization
@@ -32,7 +31,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - LanguageModel Protocol Implementation
     public func generate(prompt: String, options: GenerationOptions?) async throws -> String {
-        try await withRateLimit {
+        try await withRateLimit { [self] in
             let messages = [ChatMessage].from(prompt: prompt)
             let request = try requestBuilder.buildChatRequest(
                 model: model,
@@ -53,7 +52,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         AsyncStream { continuation in
             Task {
                 do {
-                    try await withRateLimit {
+                    try await withRateLimit { [self] in
                         let messages = [ChatMessage].from(prompt: prompt)
                         let request = try requestBuilder.buildStreamRequest(
                             model: model,
@@ -97,7 +96,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     /// Generate with Prompt object support
     public func generate(prompt: Prompt, options: GenerationOptions?) async throws -> String {
-        try await withRateLimit {
+        try await withRateLimit { [self] in
             let messages = [ChatMessage].from(prompt: prompt)
             let request = try requestBuilder.buildChatRequest(
                 model: model,
@@ -119,7 +118,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         AsyncStream { continuation in
             Task {
                 do {
-                    try await withRateLimit {
+                    try await withRateLimit { [self] in
                         let messages = [ChatMessage].from(prompt: prompt)
                         let request = try requestBuilder.buildStreamRequest(
                             model: model,

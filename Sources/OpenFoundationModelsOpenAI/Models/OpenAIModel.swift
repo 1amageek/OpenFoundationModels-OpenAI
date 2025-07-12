@@ -207,7 +207,7 @@ public enum PricingTier: String, CaseIterable, Sendable {
 
 extension OpenAIModel {
     /// Get all models of a specific type
-    public static func models(ofType type: ModelType) -> [OpenAIModel] {
+    internal static func models(ofType type: ModelType) -> [OpenAIModel] {
         return allCases.filter { $0.modelType == type }
     }
     

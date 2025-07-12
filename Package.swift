@@ -6,11 +6,11 @@ import PackageDescription
 let package = Package(
     name: "OpenFoundationModels-OpenAI",
     platforms: [
-        .macOS(.v14),
-        .iOS(.v17),
-        .tvOS(.v17),
-        .watchOS(.v10),
-        .visionOS(.v1)
+        .macOS(.v15),
+        .iOS(.v18),
+        .tvOS(.v18),
+        .watchOS(.v11),
+        .visionOS(.v2)
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -20,7 +20,7 @@ let package = Package(
     ],
     dependencies: [
         // OpenFoundationModels core framework
-        .package(url: "https://github.com/1amageek/OpenFoundationModels.git", from: "1.0.0")
+        .package(url: "https://github.com/1amageek/OpenFoundationModels.git", branch: "main")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

@@ -81,8 +81,8 @@ extension OpenAIModelFactory {
         return create(apiKey: apiKey, model: model) { config in
             config = OpenAIConfiguration(
                 apiKey: apiKey,
-                rateLimits: .tier1,
-                timeout: 60.0
+                timeout: 60.0,
+                rateLimits: .tier1
             )
         }
     }
@@ -92,9 +92,9 @@ extension OpenAIModelFactory {
         return create(apiKey: apiKey, model: model) { config in
             config = OpenAIConfiguration(
                 apiKey: apiKey,
-                rateLimits: .tier3,
                 timeout: 120.0,
-                retryPolicy: .exponentialBackoff(maxAttempts: 3)
+                retryPolicy: .exponentialBackoff(maxAttempts: 3),
+                rateLimits: .tier3
             )
         }
     }
@@ -104,9 +104,9 @@ extension OpenAIModelFactory {
         return create(apiKey: apiKey, model: model) { config in
             config = OpenAIConfiguration(
                 apiKey: apiKey,
-                rateLimits: .tier2,
                 timeout: 180.0, // Reasoning models may take longer
-                retryPolicy: .exponentialBackoff(maxAttempts: 2)
+                retryPolicy: .exponentialBackoff(maxAttempts: 2),
+                rateLimits: .tier2
             )
         }
     }

@@ -1,5 +1,24 @@
 import Foundation
 
+// MARK: - Helper Types
+public final class Box<T>: Codable, Sendable where T: Codable & Sendable {
+    public let value: T
+    
+    public init(_ value: T) {
+        self.value = value
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.value = try container.decode(T.self)
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
+}
+
 // MARK: - Chat Completion Request
 public struct ChatCompletionRequest: Codable, Sendable {
     public let model: String
@@ -141,7 +160,7 @@ public enum ContentPart: Codable, Sendable {
     case audio(AudioPart)
     
     public struct TextPart: Codable, Sendable {
-        public let type = "text"
+        public let type: String = "text"
         public let text: String
         
         public init(text: String) {
@@ -301,10 +320,15 @@ public enum ToolChoice: Codable, Sendable {
         case .required:
             try container.encode("required")
         case .function(let name):
-            try container.encode([
-                "type": "function",
-                "function": ["name": name]
-            ])
+            struct FunctionChoice: Codable {
+                let type: String = "function"
+                let function: FunctionName
+                
+                struct FunctionName: Codable {
+                    let name: String
+                }
+            }
+            try container.encode(FunctionChoice(function: FunctionChoice.FunctionName(name: name)))
         }
     }
 }
@@ -355,25 +379,30 @@ public struct JSONSchema: Codable, Sendable {
 public struct JSONSchemaProperty: Codable, Sendable {
     public let type: String
     public let description: String?
-    public let enum: [String]?
+    public let enumValues: [String]?
     public let minimum: Double?
     public let maximum: Double?
-    public let items: JSONSchemaProperty?
+    public let items: Box<JSONSchemaProperty>?
     
     public init(
         type: String,
         description: String? = nil,
-        enum: [String]? = nil,
+        enumValues: [String]? = nil,
         minimum: Double? = nil,
         maximum: Double? = nil,
         items: JSONSchemaProperty? = nil
     ) {
         self.type = type
         self.description = description
-        self.enum = `enum`
+        self.enumValues = enumValues
         self.minimum = minimum
         self.maximum = maximum
-        self.items = items
+        self.items = items.map(Box.init)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case type, description, minimum, maximum, items
+        case enumValues = "enum"
     }
 }
 
