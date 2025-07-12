@@ -482,3 +482,126 @@ print("Image: \(remark.image)")
 2. **Content Ingestion**: Process web articles for AI analysis
 3. **Static Site Generation**: Extract content with proper front matter
 4. **Research Material**: Convert research papers and documentation to readable format
+
+## Testing Strategy and Methodology
+
+### Testing Philosophy
+
+This project follows a **structured testing approach** using Swift Testing framework to ensure comprehensive coverage and reliable validation of the OpenAI provider implementation.
+
+### Core Testing Principles
+
+1. **Incremental Implementation**: Tests are implemented one at a time, with each test fully completed and validated before proceeding to the next.
+
+2. **Failure Analysis Protocol**: When any test fails, follow this analysis procedure:
+   - **Step 1**: Determine if the test itself is incorrect (test bug)
+   - **Step 2**: Analyze if the implementation has a defect (implementation bug)
+   - **Step 3**: Verify expected behavior against OpenAI API documentation
+   - **Step 4**: Make targeted fixes based on root cause analysis
+
+3. **Structural Test Design**: Tests are organized in a hierarchical structure using Swift Testing's `@Suite` for logical grouping and clear separation of concerns.
+
+### Test Implementation Methodology
+
+#### Phase-Based Implementation
+1. **Foundation Phase**: Core component tests (OpenAILanguageModel, basic functionality)
+2. **API Layer Phase**: Request builders, response handlers, and serialization
+3. **Streaming Phase**: Async operations, Server-Sent Events processing
+4. **Error Handling Phase**: Comprehensive error scenarios and recovery
+5. **Integration Phase**: End-to-end testing with live API (optional, requires API key)
+
+#### Test Analysis and Debugging Process
+
+When a test fails:
+
+1. **Test Validation**:
+   ```swift
+   // Verify test expectations are correct
+   #expect(actualValue == expectedValue, "Clear description of what should happen")
+   ```
+
+2. **Implementation Analysis**:
+   ```swift
+   // Add debug logging to understand actual behavior
+   print("Expected: \(expected), Actual: \(actual)")
+   ```
+
+3. **Documentation Cross-Reference**:
+   - Check OpenAI API documentation for correct behavior
+   - Verify OpenFoundationModels protocol requirements
+   - Validate against Apple Foundation Models β SDK compatibility
+
+4. **Targeted Fix Implementation**:
+   - Fix only the specific issue identified
+   - Ensure fix doesn't break existing tests
+   - Re-run affected test suite to validate
+
+### Test Quality Assurance
+
+#### Mock Strategy
+- **Unit Tests**: Use mock implementations to isolate components
+- **Integration Tests**: Use real HTTP client with stubbed responses
+- **Live Tests**: Optional tests with real API for final validation
+
+#### Coverage Requirements
+- **Core Functionality**: 100% coverage of public APIs
+- **Error Scenarios**: All documented error codes and network failures
+- **Edge Cases**: Boundary conditions, rate limits, timeouts
+- **Concurrency**: Thread safety and actor isolation compliance
+
+#### Test Maintenance
+- **Brittle Test Prevention**: Avoid testing implementation details
+- **Clear Test Intent**: Each test has single, clear responsibility
+- **Maintainable Assertions**: Use descriptive failure messages
+
+### Swift Testing Framework Usage
+
+#### Test Structure
+```swift
+@Suite("OpenAI Language Model Tests")
+struct OpenAILanguageModelTests {
+    
+    @Test("Basic text generation")
+    func testBasicGeneration() async throws {
+        // Implementation
+    }
+    
+    @Test("Generation with different models", arguments: [
+        OpenAIModel.gpt4o,
+        OpenAIModel.gpt4oMini,
+        OpenAIModel.o3Mini
+    ])
+    func testGenerationWithModels(model: OpenAIModel) async throws {
+        // Parameterized test implementation
+    }
+}
+```
+
+#### Async Testing Pattern
+```swift
+@Test("Streaming content delivery")
+func testStreaming() async throws {
+    await confirmation("Stream delivers content") { confirm in
+        for await chunk in model.stream(prompt: "test", options: nil) {
+            if !chunk.isEmpty {
+                confirm()
+                break
+            }
+        }
+    }
+}
+```
+
+### Continuous Improvement
+
+#### Test Metrics Tracking
+- Test execution time monitoring
+- Flaky test identification and resolution
+- Coverage gap analysis and remediation
+
+#### Documentation Updates
+- Test results inform implementation documentation
+- Edge case discoveries update API usage examples
+- Performance insights guide optimization recommendations
+
+This methodology ensures high-quality, maintainable tests that provide confidence in the OpenAI provider implementation while supporting future development and debugging efforts.

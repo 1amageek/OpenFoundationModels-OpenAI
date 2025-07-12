@@ -1,0 +1,85 @@
+name: Sync Version with Git Tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to sync (e.g., 2.1.0)'
+        required: true
+
+jobs:
+  sync-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          
+      - name: Extract version from tag or input
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Extract version from tag (remove 'v' prefix)
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            # Use manual input
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Syncing version: $VERSION"
+          
+      - name: Update version in source code
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          DATE=$(date +%Y-%m-%d)
+          
+          # Update OpenFoundationModelsOpenAI.swift
+          sed -i "s/public static let version = \".*\"/public static let version = \"$VERSION\"/" \
+            Sources/OpenFoundationModelsOpenAI/OpenFoundationModelsOpenAI.swift
+            
+          # Update build date
+          sed -i "s/public static let buildDate = \".*\"/public static let buildDate = \"$DATE\"/" \
+            Sources/OpenFoundationModelsOpenAI/OpenFoundationModelsOpenAI.swift
+            
+          # Update Package.swift if needed (for dependencies)
+          if grep -q 'let version = "' Package.swift; then
+            sed -i "s/let version = \".*\"/let version = \"$VERSION\"/" Package.swift
+          fi
+          
+      - name: Check if changes were made
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "CHANGED=false" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGED=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.CHANGED == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "chore: sync version to ${{ steps.get_version.outputs.VERSION }} [skip ci]"
+          
+          # For tag pushes, we need to update the main branch
+          if [ "${{ github.event_name }}" = "push" ]; then
+            git push origin HEAD:main
+          else
+            git push
+          fi
+          
+      - name: Summary
+        run: |
+          echo "### Version Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Date: $(date +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "- Changes Made: ${{ steps.check_changes.outputs.CHANGED }}" >> $GITHUB_STEP_SUMMARY

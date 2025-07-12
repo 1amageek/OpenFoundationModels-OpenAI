@@ -78,37 +78,34 @@ extension OpenAIModelFactory {
     
     /// Development configuration with conservative settings
     public static func development(apiKey: String, model: OpenAIModel = .gpt4oMini) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: model) { config in
-            config = OpenAIConfiguration(
-                apiKey: apiKey,
-                timeout: 60.0,
-                rateLimits: .tier1
-            )
-        }
+        let config = OpenAIConfiguration(
+            apiKey: apiKey,
+            timeout: 60.0,
+            rateLimits: .tier1
+        )
+        return OpenAILanguageModel(configuration: config, model: model)
     }
     
     /// Production configuration with optimized settings
     public static func production(apiKey: String, model: OpenAIModel = .gpt4o) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: model) { config in
-            config = OpenAIConfiguration(
-                apiKey: apiKey,
-                timeout: 120.0,
-                retryPolicy: .exponentialBackoff(maxAttempts: 3),
-                rateLimits: .tier3
-            )
-        }
+        let config = OpenAIConfiguration(
+            apiKey: apiKey,
+            timeout: 120.0,
+            retryPolicy: .exponentialBackoff(maxAttempts: 3),
+            rateLimits: .tier3
+        )
+        return OpenAILanguageModel(configuration: config, model: model)
     }
     
     /// High-performance configuration for reasoning tasks
     public static func reasoning(apiKey: String, model: OpenAIModel = .o3) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: model) { config in
-            config = OpenAIConfiguration(
-                apiKey: apiKey,
-                timeout: 180.0, // Reasoning models may take longer
-                retryPolicy: .exponentialBackoff(maxAttempts: 2),
-                rateLimits: .tier2
-            )
-        }
+        let config = OpenAIConfiguration(
+            apiKey: apiKey,
+            timeout: 180.0, // Reasoning models may take longer
+            retryPolicy: .exponentialBackoff(maxAttempts: 2),
+            rateLimits: .tier2
+        )
+        return OpenAILanguageModel(configuration: config, model: model)
     }
 }
 

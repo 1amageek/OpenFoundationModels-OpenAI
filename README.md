@@ -108,6 +108,59 @@ let reasoningModel = OpenAIModelFactory.reasoning(apiKey: apiKey, model: .o3)
 | **Reasoning** | o3-pro | 200,000 | 65,536 | ❌ | ✅ | October 2023 |
 | **Reasoning** | o4-mini | 200,000 | 16,384 | ❌ | ✅ | October 2023 |
 
+## Model Constraints
+
+### Parameter Support by Model Type
+
+| Parameter | GPT Models | Reasoning Models | Notes |
+|-----------|------------|------------------|-------|
+| `temperature` | ✅ (0.0-2.0) | ❌ | Reasoning models use deterministic generation |
+| `topP` | ✅ (0.0-1.0) | ❌ | Alternative to temperature for nucleus sampling |
+| `frequencyPenalty` | ✅ (-2.0-2.0) | ❌ | Reduces repetition based on frequency |
+| `presencePenalty` | ✅ (-2.0-2.0) | ❌ | Reduces repetition based on presence |
+| `stop` | ✅ | ❌ | Custom stop sequences |
+| `maxTokens` | ✅ | ⚠️ | Reasoning models use `maxCompletionTokens` |
+| `stream` | ✅ | ✅ | All models support streaming |
+| `functionCalling` | ✅ | ✅ | All models support function calling |
+
+### Key Differences
+
+1. **Temperature Control**: Reasoning models (o1, o3, etc.) do not support temperature, topP, or penalty parameters. They always use deterministic generation for consistent reasoning.
+
+2. **Parameter Names**: 
+   - GPT models: Use `max_tokens` parameter
+   - Reasoning models: Use `max_completion_tokens` parameter
+
+3. **Vision Support**: Only GPT models support image inputs. Reasoning models are text-only.
+
+4. **Response Time**: Reasoning models typically take longer to respond due to their complex thinking process.
+
+### Usage Example with Constraints
+
+```swift
+// GPT model - all parameters supported
+let gptResponse = try await gptModel.generate(
+    prompt: "Write a creative story",
+    options: GenerationOptions(
+        temperature: 0.9,        // ✅ Supported
+        topP: 0.95,             // ✅ Supported
+        maxTokens: 1000,        // ✅ Supported
+        frequencyPenalty: 0.5   // ✅ Supported
+    )
+)
+
+// Reasoning model - limited parameters
+let reasoningResponse = try await reasoningModel.generate(
+    prompt: "Solve this complex problem",
+    options: GenerationOptions(
+        temperature: 0.9,        // ❌ Ignored
+        topP: 0.95,             // ❌ Ignored
+        maxTokens: 2000,        // ⚠️ Converted to maxCompletionTokens
+        frequencyPenalty: 0.5   // ❌ Ignored
+    )
+)
+```
+
 ### Model Recommendations
 
 - **GPT-4o**: Best for general-purpose tasks with vision support (standard tier)
