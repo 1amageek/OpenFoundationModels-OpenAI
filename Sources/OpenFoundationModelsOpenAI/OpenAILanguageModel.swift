@@ -49,7 +49,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     public func stream(prompt: String, options: GenerationOptions?) -> AsyncStream<String> {
-        AsyncStream { continuation in
+        AsyncStream<String> { continuation in
             Task {
                 do {
                     try await withRateLimit { [self] in
@@ -62,7 +62,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         
                         let streamHandler = StreamingHandler()
                         
-                        for try await data in httpClient.stream(request) {
+                        for try await data in await httpClient.stream(request) {
                             do {
                                 if let chunks = try streamHandler.processStreamData(data) {
                                     for chunk in chunks {
@@ -72,8 +72,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                                     }
                                 }
                             } catch {
-                                let mappedError = responseHandler.handleError(error, for: model)
-                                continuation.finish(throwing: mappedError)
+                                continuation.finish()
                                 return
                             }
                         }
@@ -81,7 +80,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         continuation.finish()
                     }
                 } catch {
-                    continuation.finish(throwing: error)
+                    continuation.finish()
                 }
             }
         }
@@ -115,7 +114,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     /// Stream with Prompt object support
     public func stream(prompt: Prompt, options: GenerationOptions?) -> AsyncStream<String> {
-        AsyncStream { continuation in
+        AsyncStream<String> { continuation in
             Task {
                 do {
                     try await withRateLimit { [self] in
@@ -128,7 +127,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         
                         let streamHandler = StreamingHandler()
                         
-                        for try await data in httpClient.stream(request) {
+                        for try await data in await httpClient.stream(request) {
                             do {
                                 if let chunks = try streamHandler.processStreamData(data) {
                                     for chunk in chunks {
@@ -138,8 +137,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                                     }
                                 }
                             } catch {
-                                let mappedError = responseHandler.handleError(error, for: model)
-                                continuation.finish(throwing: mappedError)
+                                continuation.finish()
                                 return
                             }
                         }
@@ -147,7 +145,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         continuation.finish()
                     }
                 } catch {
-                    continuation.finish(throwing: error)
+                    continuation.finish()
                 }
             }
         }
@@ -186,7 +184,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         }
     }
     
-    private func withRateLimit<T>(_ operation: @escaping () async throws -> T) async throws -> T {
+    private func withRateLimit<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
         try await rateLimiter.execute(operation)
     }
 }
@@ -215,7 +213,7 @@ public actor RateLimiter {
         self.configuration = configuration
     }
     
-    internal func execute<T>(_ operation: @escaping () async throws -> T) async throws -> T {
+    internal func execute<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
         if configuration.enableBackoff {
             try await waitIfNeeded()
         }

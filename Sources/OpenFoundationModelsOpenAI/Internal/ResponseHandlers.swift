@@ -138,7 +138,7 @@ internal func mapStandardError(_ error: Error, for model: OpenAIModel) -> Error 
 
 private func mapHTTPError(_ error: OpenAIHTTPError, for model: OpenAIModel) -> Error {
     switch error {
-    case .statusError(let code, let data):
+    case .statusError(_, let data):
         // Try to extract API error from response data
         if let data = data,
            let apiError = try? JSONDecoder().decode(OpenAIAPIError.ErrorResponse.self, from: data) {

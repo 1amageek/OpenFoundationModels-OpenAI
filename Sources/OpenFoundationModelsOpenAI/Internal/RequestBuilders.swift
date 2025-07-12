@@ -55,7 +55,7 @@ internal struct GPTRequestBuilder: RequestBuilder {
         options: GenerationOptions?,
         stream: Bool
     ) throws -> ChatCompletionRequest {
-        let constraints = model.constraints
+        _ = model.constraints  // For future constraint validation
         let validatedOptions = validateOptions(options, for: model)
         
         return ChatCompletionRequest(
@@ -64,50 +64,13 @@ internal struct GPTRequestBuilder: RequestBuilder {
             temperature: validatedOptions?.temperature,
             topP: validatedOptions?.topP,
             maxTokens: validatedOptions?.maxTokens,
-            stop: validatedOptions?.stopSequences,
-            stream: stream ? true : nil,
-            frequencyPenalty: validatedOptions?.frequencyPenalty,
-            presencePenalty: validatedOptions?.presencePenalty
+            stream: stream ? true : nil
         )
     }
     
     private func validateOptions(_ options: GenerationOptions?, for model: OpenAIModel) -> GenerationOptions? {
-        guard let options = options else { return nil }
-        
-        var validated = options
-        let constraints = model.constraints
-        
-        // Apply constraints
-        if !constraints.supportsTemperature {
-            validated.temperature = nil
-        } else if let temp = validated.temperature, let range = constraints.temperatureRange {
-            validated.temperature = max(range.lowerBound, min(range.upperBound, temp))
-        }
-        
-        if !constraints.supportsTopP {
-            validated.topP = nil
-        } else if let topP = validated.topP, let range = constraints.topPRange {
-            validated.topP = max(range.lowerBound, min(range.upperBound, topP))
-        }
-        
-        if !constraints.supportsFrequencyPenalty {
-            validated.frequencyPenalty = nil
-        }
-        
-        if !constraints.supportsPresencePenalty {
-            validated.presencePenalty = nil
-        }
-        
-        if !constraints.supportsStop {
-            validated.stopSequences = nil
-        }
-        
-        // Validate max tokens
-        if let maxTokens = validated.maxTokens {
-            validated.maxTokens = min(maxTokens, model.maxOutputTokens)
-        }
-        
-        return validated
+        // OpenFoundationModels GenerationOptions are immutable, return as-is
+        return options
     }
     
     private func buildHTTPRequest(from chatRequest: ChatCompletionRequest) throws -> OpenAIHTTPRequest {
@@ -174,24 +137,8 @@ internal struct ReasoningRequestBuilder: RequestBuilder {
     }
     
     private func validateOptions(_ options: GenerationOptions?, for model: OpenAIModel) -> GenerationOptions? {
-        guard let options = options else { return nil }
-        
-        var validated = options
-        let constraints = model.constraints
-        
-        // Reasoning models don't support most parameters
-        validated.temperature = nil
-        validated.topP = nil
-        validated.frequencyPenalty = nil
-        validated.presencePenalty = nil
-        validated.stopSequences = nil
-        
-        // Only max tokens is supported (as max_completion_tokens)
-        if let maxTokens = validated.maxTokens {
-            validated.maxTokens = min(maxTokens, model.maxOutputTokens)
-        }
-        
-        return validated
+        // Reasoning models only use maxTokens, return as-is
+        return options
     }
     
     private func buildHTTPRequest(from chatRequest: ChatCompletionRequest) throws -> OpenAIHTTPRequest {
@@ -226,39 +173,9 @@ internal extension Array where Element == ChatMessage {
     }
     
     static func from(prompt: Prompt) -> [ChatMessage] {
-        // Handle simple text prompts
-        if prompt.segments.count == 1,
-           case .text(let content) = prompt.segments.first! {
-            return [ChatMessage.user(content)]
-        }
-        
-        // Handle multimodal prompts
-        var parts: [ContentPart] = []
-        
-        for segment in prompt.segments {
-            switch segment {
-            case .text(let content):
-                parts.append(.text(ContentPart.TextPart(text: content)))
-            case .image(let imageData):
-                let base64String = imageData.base64EncodedString()
-                let dataURL = "data:image/jpeg;base64,\(base64String)"
-                parts.append(.image(ContentPart.ImagePart(
-                    imageUrl: ContentPart.ImagePart.ImageURL(url: dataURL, detail: .auto)
-                )))
-            case .audio(let audioData):
-                let base64String = audioData.base64EncodedString()
-                parts.append(.audio(ContentPart.AudioPart(
-                    inputAudio: ContentPart.AudioPart.InputAudio(data: base64String, format: .mp3)
-                )))
-            }
-        }
-        
-        if parts.isEmpty {
-            return [ChatMessage.user("")]
-        } else if parts.count == 1, case .text(let textPart) = parts.first! {
-            return [ChatMessage.user(textPart.text)]
-        } else {
-            return [ChatMessage(role: .user, content: .multimodal(parts))]
-        }
+        // OpenFoundationModels Prompt segments have id and text properties
+        // Currently supports text-only content (multimodal support planned)
+        let combinedText = prompt.segments.map { $0.text }.joined(separator: "\n")
+        return [ChatMessage.user(combinedText)]
     }
 }

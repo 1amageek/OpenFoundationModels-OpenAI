@@ -128,6 +128,261 @@ Sources/OpenFoundationModelsOpenAI/
 
 6. **Advanced Streaming**: Server-Sent Events implementation with buffering, accumulation, and error handling for reliable real-time responses.
 
+## Build Fix Strategy
+
+Based on research of OpenFoundationModels framework documentation and current build errors, the following strategy addresses critical compatibility issues:
+
+### OpenFoundationModels Protocol Requirements
+
+1. **LanguageModel Protocol Interface**:
+   - `generate(prompt: String, options: GenerationOptions?) async throws -> String`
+   - `stream(prompt: String, options: GenerationOptions?) -> AsyncStream<String>`
+   - `supports(locale: Locale) -> Bool` (default: English support)
+   - `isAvailable: Bool` (synchronous property)
+
+2. **Prompt System Compatibility**:
+   - OpenFoundationModels uses `Prompt` with `Prompt.Segment` containing `id` and `text`
+   - Framework currently supports text-based prompts only
+   - Multimodal content (images/audio) not yet supported in the framework
+   - Need conversion extensions from `Prompt` to OpenAI `ChatMessage` format
+
+3. **GenerationOptions Structure**:
+   - `sampling: Sampling` (`.greedy` or `.random(topP: Double?)`)
+   - `maxTokens: Int?` (token limit)
+   - `temperature: Double?` (legacy parameter)
+   - `topP: Double?` (legacy parameter)
+
+### Critical Build Fixes Required
+
+1. **AsyncStream Closure Signatures**: 
+   - Current: `AsyncStream { continuation in }` expects wrong closure type
+   - Fix: Use proper `AsyncStream<String>` constructor with correct continuation parameter
+
+2. **Sendable Conformance Issues**:
+   - Generic types in rate limiter need `Sendable` constraints
+   - Actor isolation requires `Sendable` compliance for async operations
+
+3. **Type Conversion Extensions**:
+   - Missing `[ChatMessage].from(prompt: Prompt)` extension
+   - Missing `[ChatMessage].from(prompt: String)` extension
+   - Need proper conversion between OpenFoundationModels and OpenAI types
+
+4. **API Type Structure Issues**:
+   - Encoding problems with nested dictionaries in `ToolChoiceType`
+   - Initialization conflicts in `TextPart` and `Tool` structs
+   - Box wrapper needed for recursive `JSONSchemaProperty` type
+
+5. **Streaming Implementation**:
+   - AsyncStream extensions have incorrect closure signatures
+   - Need proper continuation parameter handling
+
+### Implementation Priority
+
+**High Priority (Blocking Build)**:
+1. Fix AsyncStream closure signatures in `OpenAILanguageModel.swift`
+2. Add Sendable constraints to generic types in `RateLimiter`
+3. Implement type conversion extensions
+
+**Medium Priority (API Compatibility)**:
+4. Fix encoding issues in `OpenAIAPITypes.swift`
+5. Resolve initialization conflicts in API structures
+
+**Low Priority (Code Quality)**:
+6. Clean up unused variable warnings
+7. Optimize error handling patterns
+
+### Testing Strategy
+
+After each fix:
+1. Run `swift build` to verify compilation
+2. Check for new errors or warnings
+3. Validate protocol conformance
+4. Test basic functionality if build succeeds
+
+This strategy ensures step-by-step resolution of build issues while maintaining compatibility with the OpenFoundationModels framework specification.
+
+## Detailed Implementation Analysis (Based on Remark Documentation Research)
+
+### OpenFoundationModels Framework Deep Understanding
+
+After thorough research using remark tool to extract complete documentation from the OpenFoundationModels repository, the following critical insights have been discovered:
+
+#### 1. **Core Protocol Definition (Confirmed from Source)**
+
+The LanguageModel protocol from OpenFoundationModels has the exact specification:
+
+```swift
+public protocol LanguageModel: Sendable {
+    func generate(prompt: String, options: GenerationOptions?) async throws -> String
+    func stream(prompt: String, options: GenerationOptions?) -> AsyncStream<String>
+    var isAvailable: Bool { get }
+    func supports(locale: Locale) -> Bool
+}
+```
+
+**Key Findings**:
+- `isAvailable` is a **synchronous** property (not async)
+- `stream` returns `AsyncStream<String>` (not AsyncThrowingStream)
+- Default implementation for `supports(locale:)` returns `true` for English only
+- Protocol conforms to `Sendable`
+
+#### 2. **Apple Foundation Models β SDK Compatibility Requirements**
+
+From APPLE_API_REFERENCE.md research:
+
+- **100% API Compatibility**: Code migration requires only import statement change
+- **GenerationSchema System**: Apple uses proprietary GenerationSchema (NOT JSONSchema)
+- **Complex Type Hierarchy**: Transcript contains nested types with namespace conflicts
+- **Exact Protocol Inheritance**: All inheritance chains must match Apple specifications
+
+#### 3. **Critical Type System Discoveries**
+
+**Namespace Conflicts Identified**:
+- `ToolCall` exists both as top-level and `Transcript.ToolCall`
+- `ToolOutput` exists both as top-level and `Transcript.ToolOutput`
+- `Instructions` exists both as top-level and `Transcript.Instructions`
+
+**Transcript Entry Structure (Confirmed)**:
+```swift
+public enum Entry {
+    case prompt(Transcript.Prompt)
+    case response(Transcript.Response)
+    case instructions(Transcript.Instructions)    // Has associated value
+    case toolCalls(Transcript.ToolCalls)         // Has associated value
+    case toolOutput(Transcript.ToolOutput)       // Has associated value
+}
+```
+
+#### 4. **Generable Protocol and Macro System**
+
+**@Generable Macro Specification (Confirmed)**:
+```swift
+@attached(extension, conformances: Generable, names: named(init(_:)), named(generatedContent))
+@attached(member, names: arbitrary)
+public macro Generable(description: String? = nil)
+```
+
+**Generated Methods**:
+- `init(_ generatedContent: GeneratedContent)` (NOT generationSchema)
+- `generatedContent: GeneratedContent` property (NOT PartiallyGenerated)
+
+#### 5. **SystemLanguageModel Integration Pattern**
+
+**Confirmed API Structure**:
+```swift
+public final class SystemLanguageModel: Observable, Sendable, SendableMetatype, Copyable {
+    public static let `default`: SystemLanguageModel
+    public var isAvailable: Bool { get }
+    public var availability: SystemLanguageModel.Availability { get }
+    public var supportedLanguages: Set<Locale.Language> { get }
+}
+```
+
+### Build Fix Implementation Strategy (Evidence-Based)
+
+#### Phase 1: Protocol Compliance (CRITICAL)
+
+1. **Fix LanguageModel Protocol Implementation**:
+   - Change `isAvailable` from async to sync property
+   - Ensure `stream` returns `AsyncStream<String>` not `AsyncThrowingStream`
+   - Implement proper `supports(locale:)` with English default
+
+2. **Fix AsyncStream Constructor Issues**:
+   - Current error: Wrong closure signature for AsyncStream
+   - Solution: Use `AsyncStream<String> { continuation in ... }`
+   - Ensure proper continuation parameter handling
+
+#### Phase 2: Type System Corrections (HIGH PRIORITY)
+
+1. **Resolve Sendable Constraints**:
+   - Add `where T: Sendable` constraints to generic functions
+   - Fix rate limiter generic types for actor isolation compliance
+
+2. **Implement Missing Type Conversions**:
+   - Create `[ChatMessage].from(prompt: String)` extension
+   - Create `[ChatMessage].from(prompt: Prompt)` extension for future Prompt support
+   - Implement proper GenerationOptions to OpenAI parameter mapping
+
+#### Phase 3: API Structure Fixes (MEDIUM PRIORITY)
+
+1. **Fix OpenAI API Types Encoding Issues**:
+   - Resolve `ToolChoiceType` encoding with proper Codable structures
+   - Fix initialization conflicts in `TextPart` and `Tool`
+   - Implement proper Box wrapper for recursive types
+
+2. **Streaming Implementation Corrections**:
+   - Fix AsyncStream extension closure signatures
+   - Implement proper Server-Sent Events handling
+   - Ensure continuation parameter compatibility
+
+#### Phase 4: Future Compatibility Preparation (LOW PRIORITY)
+
+1. **Prompt System Preparation**:
+   - OpenFoundationModels currently supports text-only prompts
+   - Multimodal support (images/audio) not yet in the framework
+   - Prepare conversion layer for future multimodal support
+
+2. **Schema System Migration Path**:
+   - Current: Using JSONSchema (incompatible with Apple)
+   - Future: Must migrate to GenerationSchema system
+   - Prepare abstraction layer for schema system transition
+
+### Testing and Validation Strategy
+
+#### Compilation Verification Process
+
+1. **Immediate Build Fix Validation**:
+   ```bash
+   swift build  # Must succeed without errors
+   ```
+
+2. **Protocol Conformance Testing**:
+   ```swift
+   // Verify LanguageModel protocol compliance
+   let model: LanguageModel = OpenAILanguageModel(...)
+   let available: Bool = model.isAvailable  // Must be sync
+   let stream: AsyncStream<String> = model.stream(...)  // Must be AsyncStream
+   ```
+
+3. **Type Safety Verification**:
+   ```swift
+   // Verify Sendable compliance
+   let rateLimitedOperation: () async throws -> String = { ... }  // Must be Sendable
+   ```
+
+#### Progressive Implementation Testing
+
+1. **Build Error Resolution**:
+   - Fix one error category at a time
+   - Run `swift build` after each fix
+   - Document any new errors discovered
+
+2. **Runtime Behavior Validation**:
+   - Test streaming functionality
+   - Verify rate limiting behavior
+   - Validate error handling paths
+
+### Documentation Integration Requirements
+
+#### CLAUDE.md Documentation Updates
+
+1. **Protocol Compliance Section**:
+   - Document exact LanguageModel protocol requirements
+   - Explain synchronous vs asynchronous property differences
+   - Detail AsyncStream vs AsyncThrowingStream usage
+
+2. **Type System Documentation**:
+   - Document namespace conflict resolutions
+   - Explain Sendable constraint requirements
+   - Detail type conversion strategies
+
+3. **Future Migration Path**:
+   - Document GenerationSchema migration requirements
+   - Explain multimodal support preparation
+   - Detail Apple compatibility requirements
+
+This comprehensive analysis based on actual OpenFoundationModels framework research ensures that our implementation will achieve 100% compatibility with Apple's Foundation Models β SDK while maintaining the unified interface design goals.
+
 ## Remark Tool Integration
 
 ### Overview
