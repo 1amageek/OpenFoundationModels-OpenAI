@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the OpenAI provider implementation for OpenFoundationModels framework. It enables using OpenAI models (GPT-3.5, GPT-4, GPT-4o) through Apple's Foundation Models API interface.
+This is the OpenAI provider implementation for OpenFoundationModels framework. It enables using OpenAI's latest GPT and Reasoning models (GPT-4o, o1, o3, o4-mini) through Apple's Foundation Models API interface with a unified, self-contained architecture.
 
 ## Build and Development Commands
 
@@ -36,19 +36,25 @@ swift package generate-xcodeproj
 ### Core Components
 
 1. **OpenAILanguageModel**: Main provider class implementing the `LanguageModel` protocol from OpenFoundationModels
-   - Handles both synchronous generation and streaming
-   - Manages rate limiting and error handling
-   - Supports structured generation via Function Calling
+   - Unified interface for all OpenAI models (GPT and Reasoning)
+   - Automatic constraint handling based on model type
+   - Built-in streaming support with Server-Sent Events
+   - Actor-based rate limiting and retry logic
 
-2. **OpenAIConfiguration**: Configuration management
-   - API credentials and model selection
-   - Rate limit configuration
-   - Retry policies and timeouts
+2. **OpenAIModel**: Unified model enumeration
+   - Single enum covering GPT-4o, Reasoning models (o1, o3, o4-mini)
+   - Internal model type detection for automatic parameter validation
+   - Model-specific capabilities and constraints
 
-3. **Parameter Mapping**: Converts between Foundation Models API and OpenAI API
-   - `GenerationOptions` → OpenAI `ChatQuery`
-   - `Prompt` segments → OpenAI messages with multimodal support
-   - `GenerationSchema` → OpenAI Function Calling schema
+3. **Custom HTTP Client**: Self-contained networking layer
+   - No external dependencies beyond OpenFoundationModels
+   - URLSession-based implementation with streaming support
+   - Built-in error mapping and response handling
+
+4. **Request/Response Handlers**: Model-specific processing
+   - Separate builders for GPT vs Reasoning model requests
+   - Automatic parameter filtering based on model constraints
+   - Specialized error handling per model type
 
 ### Key Implementation Requirements
 
@@ -77,21 +83,27 @@ When implementing the OpenAILanguageModel, ensure:
 
 ### Dependencies
 
-- OpenFoundationModels: Core framework providing protocols and types
-- MacPaw/OpenAI: Swift client for OpenAI API
-- Both should be added to Package.swift
+- OpenFoundationModels: Core framework providing protocols and types (only dependency)
+- Self-contained HTTP client implementation (no external API clients)
+- Zero third-party dependencies for maximum flexibility
 
 ### Module Structure
 
 ```
 Sources/OpenFoundationModelsOpenAI/
-├── OpenAILanguageModel.swift      # Main provider implementation
-├── OpenAIConfiguration.swift      # Configuration and model definitions
-├── OpenAIError.swift             # Error types and mapping
-├── ParameterMapping.swift        # API parameter conversion
-├── StructuredGeneration.swift    # Function Calling implementation
-├── StreamingHandler.swift        # Streaming response handling
-└── Extensions/                   # Convenience extensions
+├── OpenAILanguageModel.swift           # Main provider implementation
+├── OpenAIConfiguration.swift           # Configuration and model definitions
+├── OpenFoundationModelsOpenAI.swift    # Public API and factory methods
+├── Models/
+│   └── OpenAIModel.swift               # Unified model enum with capabilities
+├── HTTP/
+│   └── OpenAIHTTPClient.swift          # Custom HTTP client implementation
+├── API/
+│   └── OpenAIAPITypes.swift            # OpenAI API data structures
+└── Internal/
+    ├── RequestBuilders.swift           # Model-specific request builders
+    ├── ResponseHandlers.swift          # Model-specific response handlers
+    └── StreamingHandler.swift          # Advanced streaming implementation
 ```
 
 ## Testing Strategy
@@ -104,13 +116,17 @@ Sources/OpenFoundationModelsOpenAI/
 
 ## Important Design Decisions
 
-1. **Function Calling for Structured Generation**: Instead of using response format, use OpenAI's Function Calling feature for reliable structured output generation.
+1. **Unified Model Interface**: Single OpenAIModel enum that internally handles GPT vs Reasoning model differences, providing a seamless user experience without model-specific APIs.
 
-2. **Rate Limiting**: Implement client-side rate limiting with configurable limits per model tier, using actor-based concurrency for thread safety.
+2. **Self-Contained Architecture**: No external dependencies beyond OpenFoundationModels, using custom URLSession-based HTTP client for maximum flexibility and control.
 
-3. **Model Selection**: Support all GPT models with proper context window limits and capability flags (vision, function calling).
+3. **Automatic Constraint Handling**: Internal model type detection automatically applies correct parameter constraints (e.g., temperature not supported for Reasoning models).
 
-4. **Error Mapping**: Map OpenAI-specific errors to generic `LanguageModelError` types while preserving detailed error information.
+4. **Actor-Based Concurrency**: Rate limiting and HTTP client use Swift actors for thread-safe operation and optimal performance.
+
+5. **Model-Specific Builders**: Internal factory pattern creates appropriate request builders and response handlers based on model type while maintaining unified external API.
+
+6. **Advanced Streaming**: Server-Sent Events implementation with buffering, accumulation, and error handling for reliable real-time responses.
 
 ## Remark Tool Integration
 

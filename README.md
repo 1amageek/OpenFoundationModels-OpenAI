@@ -1,14 +1,14 @@
 # OpenFoundationModels-OpenAI
 
-OpenAI provider for the [OpenFoundationModels](https://github.com/1amageek/OpenFoundationModels) framework, enabling the use of OpenAI's latest GPT and Reasoning models through Apple's Foundation Models API interface.
+OpenAI provider for the [OpenFoundationModels](https://github.com/1amageek/OpenFoundationModels) framework, enabling the use of OpenAI's latest GPT and Reasoning models through Apple's Foundation Models API interface. Features a unified model interface with automatic constraint handling and self-contained architecture.
 
 ## Features
 
-- 🤖 **Complete Model Support**: GPT-4o, GPT-4 Turbo, and all Reasoning models (o1, o3, o4)
-- 🧠 **Reasoning Models**: Native support for o1, o3, o3-pro, and o4-mini with automatic constraint handling
+- 🤖 **Complete Model Support**: GPT-4o, GPT-4o Mini, GPT-4 Turbo, and all Reasoning models (o1, o1-pro, o3, o3-pro, o4-mini)
+- 🧠 **Reasoning Models**: Native support for o1, o1-pro, o3, o3-pro, and o4-mini with automatic constraint handling
 - 🔄 **Streaming Support**: Real-time response streaming with Server-Sent Events
 - 🎯 **Unified Interface**: Single API for all models with automatic parameter validation
-- 🔧 **Multimodal Support**: Text, image, and audio input support
+- 🔧 **Multimodal Support**: Text, image, and audio input support (GPT models only)
 - 🚦 **Self-Contained**: No external dependencies beyond OpenFoundationModels
 - ⚡ **Performance Optimized**: Custom HTTP client with actor-based concurrency
 - 🛡️ **Type Safety**: Compile-time model validation and constraint checking
@@ -165,9 +165,17 @@ struct BookReview {
     let summary: String
 }
 
-let review = try await openAI.generateStructured(
+// Note: Structured generation requires OpenFoundationModels framework integration
+let session = LanguageModelSession(
+    model: OpenAIModelFactory.gpt4o(apiKey: apiKey),
+    guardrails: .default,
+    tools: [],
+    instructions: nil
+)
+
+let review = try await session.generate(
     prompt: "Review the book '1984' by George Orwell",
-    type: BookReview.self
+    as: BookReview.self
 )
 
 print("Title: \(review.title)")
@@ -190,17 +198,30 @@ let response = try await session.respond { prompt }
 ### Generation Options
 
 ```swift
-// Creative writing
-let creative = GenerationOptions.creative(for: .gpt4o)
+// Creative writing (high temperature, diverse output)
+let creative = GenerationOptions(
+    temperature: 0.9,
+    maxTokens: 2000,
+    topP: 0.95
+)
 
-// Precise, factual responses
-let precise = GenerationOptions.precise(for: .gpt4o)
+// Precise, factual responses (low temperature)
+let precise = GenerationOptions(
+    temperature: 0.1,
+    maxTokens: 1000
+)
 
-// Code generation
-let coding = GenerationOptions.coding(for: .gpt4o)
+// Code generation (structured, deterministic)
+let coding = GenerationOptions(
+    temperature: 0.0,
+    maxTokens: 4000
+)
 
-// Conversational
-let chat = GenerationOptions.conversational(for: .gpt4o)
+// Conversational (balanced settings)
+let chat = GenerationOptions(
+    temperature: 0.7,
+    maxTokens: 1500
+)
 ```
 
 ## Rate Limiting
@@ -229,14 +250,16 @@ let custom = RateLimitConfiguration(
 ```swift
 do {
     let response = try await openAI.generate(prompt: "Hello")
-} catch let error as OpenAIProviderError {
+} catch let error as OpenAIModelError {
     switch error {
-    case .rateLimitExceeded(let retryAfter):
-        print("Rate limited. Retry after \(retryAfter ?? 60) seconds")
-    case .contextLengthExceeded(let promptTokens, let maxTokens):
-        print("Context too long: \(promptTokens)/\(maxTokens) tokens")
+    case .rateLimitExceeded:
+        print("Rate limited. Please try again later")
+    case .contextLengthExceeded(let model, let maxTokens):
+        print("Context too long for model \(model). Maximum: \(maxTokens) tokens")
     case .modelNotAvailable(let model):
         print("Model \(model) not available")
+    case .parameterNotSupported(let parameter, let model):
+        print("Parameter \(parameter) not supported by model \(model)")
     default:
         print("Error: \(error.localizedDescription)")
     }
