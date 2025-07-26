@@ -111,35 +111,36 @@ struct OpenAILanguageModelTests {
         #expect(info.contextWindow >= info.maxOutputTokens, "Context window should be >= max output tokens")
     }
     
-    // MARK: - Factory Method Tests
+    // MARK: - Convenience Initializer Tests
     
-    @Test("Factory method creates model with API key")
-    func testFactoryMethodWithAPIKey() {
-        let model = OpenAILanguageModel.create(
+    @Test("Convenience initializer with API key and model")
+    func testConvenienceInitializerWithAPIKeyAndModel() {
+        let model = OpenAILanguageModel(
             apiKey: "test-key",
             model: .gpt4o
         )
         
-        #expect(model.isAvailable == true, "Factory-created model should be available")
-        #expect(model.modelInfo.name == "gpt-4o", "Factory-created model should have correct name")
+        #expect(model.isAvailable == true, "Model created with convenience initializer should be available")
+        #expect(model.modelInfo.name == "gpt-4o", "Model created with convenience initializer should have correct name")
     }
     
-    @Test("Convenience factory methods work correctly")
-    func testConvenienceFactoryMethods() {
-        let gpt4o = OpenAILanguageModel.gpt4o(apiKey: "test-key")
-        #expect(gpt4o.modelInfo.name == "gpt-4o", "GPT-4o factory method should create correct model")
+    @Test("Convenience initializer with default model")
+    func testConvenienceInitializerWithDefaultModel() {
+        let model = OpenAILanguageModel(apiKey: "test-key")
+        #expect(model.modelInfo.name == "gpt-4o", "Default model should be GPT-4o")
+    }
+    
+    @Test("Convenience initializer with custom base URL")
+    func testConvenienceInitializerWithCustomBaseURL() {
+        let customURL = URL(string: "https://custom.openai.com/v1")!
+        let model = OpenAILanguageModel(
+            apiKey: "test-key",
+            model: .gpt4oMini,
+            baseURL: customURL
+        )
         
-        let gpt4oMini = OpenAILanguageModel.gpt4oMini(apiKey: "test-key")
-        #expect(gpt4oMini.modelInfo.name == "gpt-4o-mini", "GPT-4o Mini factory method should create correct model")
-        
-        let o3 = OpenAILanguageModel.o3(apiKey: "test-key")
-        #expect(o3.modelInfo.name == "o3", "o3 factory method should create correct model")
-        
-        let o3Pro = OpenAILanguageModel.o3Pro(apiKey: "test-key")
-        #expect(o3Pro.modelInfo.name == "o3-pro", "o3 Pro factory method should create correct model")
-        
-        let o4Mini = OpenAILanguageModel.o4Mini(apiKey: "test-key")
-        #expect(o4Mini.modelInfo.name == "o4-mini", "o4 Mini factory method should create correct model")
+        #expect(model.isAvailable == true, "Model with custom base URL should be available")
+        #expect(model.modelInfo.name == "gpt-4o-mini", "Model should have correct name")
     }
     
     // MARK: - Utility Method Tests

@@ -24,8 +24,15 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     ) {
         self.httpClient = OpenAIHTTPClient(configuration: configuration)
         self.model = model
-        self.requestBuilder = RequestBuilderFactory.createRequestBuilder(for: model)
-        self.responseHandler = ResponseHandlerFactory.createResponseHandler(for: model)
+        // Direct instantiation based on model type
+        switch model.modelType {
+        case .gpt:
+            self.requestBuilder = GPTRequestBuilder()
+            self.responseHandler = GPTResponseHandler()
+        case .reasoning:
+            self.requestBuilder = ReasoningRequestBuilder()
+            self.responseHandler = ReasoningResponseHandler()
+        }
         self.rateLimiter = RateLimiter(configuration: configuration.rateLimits)
     }
     
@@ -247,60 +254,6 @@ public actor RateLimiter {
     }
 }
 
-// MARK: - Factory Methods
-extension OpenAILanguageModel {
-    
-    /// Create with API key and model
-    public static func create(
-        apiKey: String,
-        model: OpenAIModel,
-        baseURL: URL? = nil,
-        organization: String? = nil
-    ) -> OpenAILanguageModel {
-        let configuration = OpenAIConfiguration(
-            apiKey: apiKey,
-            baseURL: baseURL ?? URL(string: "https://api.openai.com/v1")!,
-            organization: organization
-        )
-        return OpenAILanguageModel(configuration: configuration, model: model)
-    }
-    
-    /// Create GPT-4o instance
-    public static func gpt4o(apiKey: String) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: .gpt4o)
-    }
-    
-    /// Create GPT-4o Mini instance
-    public static func gpt4oMini(apiKey: String) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: .gpt4oMini)
-    }
-    
-    /// Create o3 reasoning model instance
-    public static func o3(apiKey: String) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: .o3)
-    }
-    
-    /// Create o3 Pro reasoning model instance
-    public static func o3Pro(apiKey: String) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: .o3Pro)
-    }
-    
-    /// Create o4 Mini reasoning model instance
-    public static func o4Mini(apiKey: String) -> OpenAILanguageModel {
-        return create(apiKey: apiKey, model: .o4Mini)
-    }
-    
-    /// Create with advanced configuration
-    public static func create(
-        apiKey: String,
-        model: OpenAIModel,
-        configuration: (inout OpenAIConfiguration) -> Void
-    ) -> OpenAILanguageModel {
-        var config = OpenAIConfiguration(apiKey: apiKey)
-        configuration(&config)
-        return OpenAILanguageModel(configuration: config, model: model)
-    }
-}
 
 // MARK: - Convenience Extensions
 extension OpenAILanguageModel {

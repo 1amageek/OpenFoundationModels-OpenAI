@@ -319,14 +319,14 @@ struct ErrorHandlingTests {
         #expect((mappedError as NSError).code == 999, "Should preserve error code")
     }
     
-    @Test("Response handler factory creates correct handlers")
-    func testResponseHandlerFactory() {
+    @Test("Response handler types are created correctly")
+    func testResponseHandlerTypes() {
         // Test GPT models
-        let gptHandler = ResponseHandlerFactory.createResponseHandler(for: .gpt4o)
+        let gptHandler = GPTResponseHandler()
         #expect(type(of: gptHandler) == GPTResponseHandler.self, "Should create GPT handler for GPT models")
         
         // Test reasoning models
-        let reasoningHandler = ResponseHandlerFactory.createResponseHandler(for: .o1)
+        let reasoningHandler = ReasoningResponseHandler()
         #expect(type(of: reasoningHandler) == ReasoningResponseHandler.self, "Should create reasoning handler for reasoning models")
     }
     

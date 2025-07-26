@@ -16,96 +16,28 @@ import Foundation
 public typealias OpenAIProvider = OpenAILanguageModel
 public typealias OpenAIConfig = OpenAIConfiguration
 
-// MARK: - Factory Methods
-public struct OpenAIModelFactory {
+// MARK: - Convenience Initializers
+extension OpenAILanguageModel {
+    /// Initialize with API key and model
+    public convenience init(
+        apiKey: String,
+        model: OpenAIModel = .gpt4o
+    ) {
+        let configuration = OpenAIConfiguration(apiKey: apiKey)
+        self.init(configuration: configuration, model: model)
+    }
     
-    /// Create a language model with API key and model
-    public static func create(
+    /// Initialize with API key, model, and custom base URL
+    public convenience init(
         apiKey: String,
         model: OpenAIModel,
-        baseURL: URL? = nil,
-        organization: String? = nil
-    ) -> OpenAILanguageModel {
-        return OpenAILanguageModel.create(
+        baseURL: URL
+    ) {
+        let configuration = OpenAIConfiguration(
             apiKey: apiKey,
-            model: model,
-            baseURL: baseURL,
-            organization: organization
+            baseURL: baseURL
         )
-    }
-    
-    /// Create GPT-4o instance (recommended for general use)
-    public static func gpt4o(apiKey: String) -> OpenAILanguageModel {
-        return OpenAILanguageModel.gpt4o(apiKey: apiKey)
-    }
-    
-    /// Create GPT-4o Mini instance (cost-effective)
-    public static func gpt4oMini(apiKey: String) -> OpenAILanguageModel {
-        return OpenAILanguageModel.gpt4oMini(apiKey: apiKey)
-    }
-    
-    /// Create o3 reasoning model instance
-    public static func o3(apiKey: String) -> OpenAILanguageModel {
-        return OpenAILanguageModel.o3(apiKey: apiKey)
-    }
-    
-    /// Create o3 Pro reasoning model instance (highest capability)
-    public static func o3Pro(apiKey: String) -> OpenAILanguageModel {
-        return OpenAILanguageModel.o3Pro(apiKey: apiKey)
-    }
-    
-    /// Create o4 Mini reasoning model instance
-    public static func o4Mini(apiKey: String) -> OpenAILanguageModel {
-        return OpenAILanguageModel.o4Mini(apiKey: apiKey)
-    }
-    
-    /// Create with custom configuration
-    public static func create(
-        apiKey: String,
-        model: OpenAIModel,
-        configure: (inout OpenAIConfiguration) -> Void
-    ) -> OpenAILanguageModel {
-        return OpenAILanguageModel.create(
-            apiKey: apiKey,
-            model: model,
-            configuration: configure
-        )
-    }
-}
-
-// MARK: - Preset Configurations
-extension OpenAIModelFactory {
-    
-    /// Development configuration with conservative settings
-    public static func development(apiKey: String, model: OpenAIModel = .gpt4oMini) -> OpenAILanguageModel {
-        let config = OpenAIConfiguration(
-            apiKey: apiKey,
-            timeout: 60.0,
-            rateLimits: .tier1
-        )
-        return OpenAILanguageModel(configuration: config, model: model)
-    }
-    
-    /// Production configuration with optimized settings
-    public static func production(apiKey: String, model: OpenAIModel = .gpt4o) -> OpenAILanguageModel {
-        let config = OpenAIConfiguration(
-            apiKey: apiKey,
-            timeout: 120.0,
-            retryPolicy: .exponentialBackoff(maxAttempts: 3),
-            rateLimits: .tier3
-        )
-        return OpenAILanguageModel(configuration: config, model: model)
-    }
-    
-    /// High-performance configuration for reasoning tasks
-    public static func reasoning(apiKey: String, model: OpenAIModel = .o3) -> OpenAILanguageModel {
-        let config = OpenAIConfiguration(
-            apiKey: apiKey,
-            timeout: 180.0, // Reasoning models may take longer
-            retryPolicy: .exponentialBackoff(maxAttempts: 2),
-            rateLimits: .tier2
-        )
-        return OpenAILanguageModel(configuration: config, model: model)
+        self.init(configuration: configuration, model: model)
     }
 }
 
@@ -183,7 +115,7 @@ public struct OpenFoundationModelsOpenAI {
 }
 
 // MARK: - Migration Helpers (for backward compatibility)
-@available(*, deprecated, message: "Use OpenAIModelFactory.create(apiKey:model:) instead")
+@available(*, deprecated, message: "Use OpenAILanguageModel(apiKey:model:) instead")
 public func createOpenAIProvider(apiKey: String, model: OpenAIModel) -> OpenAILanguageModel {
-    return OpenAIModelFactory.create(apiKey: apiKey, model: model)
+    return OpenAILanguageModel(apiKey: apiKey, model: model)
 }

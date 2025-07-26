@@ -35,9 +35,9 @@ Or add it through Xcode:
 import OpenFoundationModels
 import OpenFoundationModelsOpenAI
 
-// Easy model creation using factory methods
-let gptModel = OpenAIModelFactory.gpt4o(apiKey: "your-openai-api-key")
-let reasoningModel = OpenAIModelFactory.o3(apiKey: "your-openai-api-key")
+// Simple model creation with convenience initializers
+let gptModel = OpenAILanguageModel(apiKey: "your-openai-api-key", model: .gpt4o)
+let reasoningModel = OpenAILanguageModel(apiKey: "your-openai-api-key", model: .o3)
 
 // Use with Apple's Foundation Models API
 let session = LanguageModelSession(
@@ -60,39 +60,33 @@ print(response.content)
 ### Basic Model Creation
 
 ```swift
-// Direct model creation
-let model = OpenAIModelFactory.create(apiKey: "your-api-key", model: .gpt4o)
+// Create with API key and model
+let model = OpenAILanguageModel(apiKey: "your-api-key", model: .gpt4o)
 
-// Convenient factory methods
-let gpt4o = OpenAIModelFactory.gpt4o(apiKey: "your-api-key")
-let o3 = OpenAIModelFactory.o3(apiKey: "your-api-key")
-let o3Pro = OpenAIModelFactory.o3Pro(apiKey: "your-api-key")
+// Create with default model (GPT-4o)
+let defaultModel = OpenAILanguageModel(apiKey: "your-api-key")
+
+// Create with custom base URL
+let customModel = OpenAILanguageModel(
+    apiKey: "your-api-key",
+    model: .o3,
+    baseURL: URL(string: "https://custom.openai.com/v1")!
+)
 ```
 
 ### Advanced Configuration
 
 ```swift
-let model = OpenAIModelFactory.create(apiKey: "your-api-key", model: .gpt4o) { config in
-    config = OpenAIConfiguration(
-        apiKey: "your-api-key",
-        rateLimits: .tier3,
-        timeout: 120.0,
-        retryPolicy: .exponentialBackoff(maxAttempts: 3)
-    )
-}
-```
+// Create configuration with custom settings
+let configuration = OpenAIConfiguration(
+    apiKey: "your-api-key",
+    timeout: 120.0,
+    retryPolicy: .exponentialBackoff(maxAttempts: 3),
+    rateLimits: .tier3
+)
 
-### Environment-Specific Setup
-
-```swift
-// Development (conservative settings)
-let devModel = OpenAIModelFactory.development(apiKey: apiKey, model: .gpt4oMini)
-
-// Production (optimized settings)
-let prodModel = OpenAIModelFactory.production(apiKey: apiKey, model: .gpt4o)
-
-// Reasoning tasks (specialized configuration)
-let reasoningModel = OpenAIModelFactory.reasoning(apiKey: apiKey, model: .o3)
+// Create model with custom configuration
+let model = OpenAILanguageModel(configuration: configuration, model: .gpt4o)
 ```
 
 ## Supported Models

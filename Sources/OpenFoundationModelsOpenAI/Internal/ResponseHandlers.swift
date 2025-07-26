@@ -111,17 +111,6 @@ internal enum OpenAIResponseError: Error, LocalizedError, Sendable {
     }
 }
 
-// MARK: - Response Handler Factory
-internal struct ResponseHandlerFactory {
-    static func createResponseHandler(for model: OpenAIModel) -> any ResponseHandler {
-        switch model.modelType {
-        case .gpt:
-            return GPTResponseHandler()
-        case .reasoning:
-            return ReasoningResponseHandler()
-        }
-    }
-}
 
 // MARK: - Common Error Mapping
 internal func mapStandardError(_ error: Error, for model: OpenAIModel) -> Error {

@@ -63,7 +63,7 @@ When implementing the OpenAILanguageModel, ensure:
 1. **Protocol Conformance**:
    - `generate(prompt:options:)` - Synchronous text generation
    - `stream(prompt:options:)` - Returns `AsyncStream<String>`
-   - `isAvailable` - Async property checking API availability
+   - `isAvailable` - Synchronous property checking API availability
    - `supports(locale:)` - Returns true (OpenAI supports most languages)
 
 2. **Structured Generation**:
@@ -93,7 +93,7 @@ When implementing the OpenAILanguageModel, ensure:
 Sources/OpenFoundationModelsOpenAI/
 ├── OpenAILanguageModel.swift           # Main provider implementation
 ├── OpenAIConfiguration.swift           # Configuration and model definitions
-├── OpenFoundationModelsOpenAI.swift    # Public API and factory methods
+├── OpenFoundationModelsOpenAI.swift    # Public API and convenience initializers
 ├── Models/
 │   └── OpenAIModel.swift               # Unified model enum with capabilities
 ├── HTTP/
@@ -124,7 +124,7 @@ Sources/OpenFoundationModelsOpenAI/
 
 4. **Actor-Based Concurrency**: Rate limiting and HTTP client use Swift actors for thread-safe operation and optimal performance.
 
-5. **Model-Specific Builders**: Internal factory pattern creates appropriate request builders and response handlers based on model type while maintaining unified external API.
+5. **Direct Instantiation Pattern**: Direct instantiation of request builders and response handlers based on model type, following Swift conventions without factory pattern.
 
 6. **Advanced Streaming**: Server-Sent Events implementation with buffering, accumulation, and error handling for reliable real-time responses.
 

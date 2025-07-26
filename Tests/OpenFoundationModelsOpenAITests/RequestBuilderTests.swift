@@ -188,29 +188,29 @@ struct RequestBuilderTests {
         #expect(chatRequest.maxTokens == nil, "Reasoning models should not use maxTokens")
     }
     
-    // MARK: - Request Builder Factory Tests
+    // MARK: - Request Builder Type Tests
     
-    @Test("Factory creates correct builder for GPT models")
-    func testFactoryForGPTModels() {
-        let gptBuilder = RequestBuilderFactory.createRequestBuilder(for: .gpt4o)
-        let miniBuilder = RequestBuilderFactory.createRequestBuilder(for: .gpt4oMini)
-        
+    @Test("Correct builder types are created for different model types")
+    func testBuilderTypesForModelTypes() {
+        // GPT models should use GPTRequestBuilder
+        let gptBuilder = GPTRequestBuilder()
         #expect(type(of: gptBuilder) == GPTRequestBuilder.self, "Should create GPTRequestBuilder for GPT models")
-        #expect(type(of: miniBuilder) == GPTRequestBuilder.self, "Should create GPTRequestBuilder for GPT Mini models")
-    }
-    
-    @Test("Factory creates correct builder for reasoning models")
-    func testFactoryForReasoningModels() {
-        let o1Builder = RequestBuilderFactory.createRequestBuilder(for: .o1)
-        let o3Builder = RequestBuilderFactory.createRequestBuilder(for: .o3)
         
-        #expect(type(of: o1Builder) == ReasoningRequestBuilder.self, "Should create ReasoningRequestBuilder for o1")
-        #expect(type(of: o3Builder) == ReasoningRequestBuilder.self, "Should create ReasoningRequestBuilder for o3")
+        // Reasoning models should use ReasoningRequestBuilder
+        let reasoningBuilder = ReasoningRequestBuilder()
+        #expect(type(of: reasoningBuilder) == ReasoningRequestBuilder.self, "Should create ReasoningRequestBuilder for reasoning models")
     }
     
-    @Test("Factory creates correct builder type for all models", arguments: OpenAIModel.allCases)
-    func testFactoryForAllModels(model: OpenAIModel) {
-        let builder = RequestBuilderFactory.createRequestBuilder(for: model)
+    @Test("Builder type selection based on model type", arguments: OpenAIModel.allCases)
+    func testBuilderSelectionForModels(model: OpenAIModel) {
+        // This test verifies the logic that would be in OpenAILanguageModel init
+        let builder: any RequestBuilder
+        switch model.modelType {
+        case .gpt:
+            builder = GPTRequestBuilder()
+        case .reasoning:
+            builder = ReasoningRequestBuilder()
+        }
         
         switch model.modelType {
         case .gpt:

@@ -154,17 +154,6 @@ internal struct ReasoningRequestBuilder: RequestBuilder {
     }
 }
 
-// MARK: - Request Builder Factory
-internal struct RequestBuilderFactory {
-    static func createRequestBuilder(for model: OpenAIModel) -> any RequestBuilder {
-        switch model.modelType {
-        case .gpt:
-            return GPTRequestBuilder()
-        case .reasoning:
-            return ReasoningRequestBuilder()
-        }
-    }
-}
 
 // MARK: - Prompt to ChatMessage Conversion
 internal extension Array where Element == ChatMessage {
