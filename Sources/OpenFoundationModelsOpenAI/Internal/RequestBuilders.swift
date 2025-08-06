@@ -62,8 +62,6 @@ internal struct GPTRequestBuilder: RequestBuilder {
             model: model.apiName,
             messages: messages,
             temperature: validatedOptions?.temperature,
-            topP: validatedOptions?.topP,
-            maxTokens: validatedOptions?.maxTokens,
             stream: stream ? true : nil
         )
     }
@@ -125,13 +123,10 @@ internal struct ReasoningRequestBuilder: RequestBuilder {
         options: GenerationOptions?,
         stream: Bool
     ) throws -> ChatCompletionRequest {
-        let validatedOptions = validateOptions(options, for: model)
-        
         // Reasoning models use max_completion_tokens instead of max_tokens
         return ChatCompletionRequest(
             model: model.apiName,
             messages: messages,
-            maxCompletionTokens: validatedOptions?.maxTokens,
             stream: stream ? true : nil
         )
     }
@@ -162,9 +157,9 @@ internal extension Array where Element == ChatMessage {
     }
     
     static func from(prompt: Prompt) -> [ChatMessage] {
-        // OpenFoundationModels Prompt segments have id and text properties
+        // OpenFoundationModels Prompt has a content property accessible via description
         // Currently supports text-only content (multimodal support planned)
-        let combinedText = prompt.segments.map { $0.text }.joined(separator: "\n")
+        let combinedText = prompt.description
         return [ChatMessage.user(combinedText)]
     }
 }

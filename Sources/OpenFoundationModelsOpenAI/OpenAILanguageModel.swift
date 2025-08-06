@@ -181,7 +181,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             let request = try requestBuilder.buildChatRequest(
                 model: model,
                 messages: [ChatMessage.user("test")],
-                options: GenerationOptions(maxTokens: 1)
+                options: GenerationOptions(maximumResponseTokens: 1)
             )
             
             let _: ChatCompletionResponse = try await httpClient.send(request)

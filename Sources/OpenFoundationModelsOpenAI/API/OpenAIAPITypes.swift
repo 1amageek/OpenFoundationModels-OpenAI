@@ -160,11 +160,22 @@ public enum ContentPart: Codable, Sendable {
     case audio(AudioPart)
     
     public struct TextPart: Codable, Sendable {
-        public let type: String = "text"
+        public let type: String
         public let text: String
         
         public init(text: String) {
+            self.type = "text"
             self.text = text
+        }
+        
+        private enum CodingKeys: String, CodingKey {
+            case type, text
+        }
+        
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.type = try container.decodeIfPresent(String.self, forKey: .type) ?? "text"
+            self.text = try container.decode(String.self, forKey: .text)
         }
     }
     
@@ -259,11 +270,22 @@ public enum ContentPart: Codable, Sendable {
 
 // MARK: - Tool Definitions
 public struct Tool: Codable, Sendable {
-    public let type: String = "function"
+    public let type: String
     public let function: Function
     
     public init(function: Function) {
+        self.type = "function"
         self.function = function
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case type, function
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try container.decodeIfPresent(String.self, forKey: .type) ?? "function"
+        self.function = try container.decode(Function.self, forKey: .function)
     }
     
     public struct Function: Codable, Sendable {
@@ -321,8 +343,13 @@ public enum ToolChoice: Codable, Sendable {
             try container.encode("required")
         case .function(let name):
             struct FunctionChoice: Codable {
-                let type: String = "function"
+                let type: String
                 let function: FunctionName
+                
+                init(function: FunctionName) {
+                    self.type = "function"
+                    self.function = function
+                }
                 
                 struct FunctionName: Codable {
                     let name: String
