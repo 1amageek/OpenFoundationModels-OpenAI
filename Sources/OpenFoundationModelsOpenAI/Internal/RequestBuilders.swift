@@ -3,19 +3,188 @@ import OpenFoundationModels
 
 // MARK: - Schema Conversion Helper
 internal func convertToJSONSchema(_ schema: GenerationSchema) -> JSONSchema {
-    // Since GenerationSchema properties are not directly accessible,
-    // we'll create a basic object schema. This is a placeholder implementation
-    // that would need to be expanded based on actual schema introspection capabilities.
+    // Parse the schema's debug description to extract structure
+    // This is necessary because GenerationSchema's internal structure is not publicly accessible
+    let debugDesc = schema.debugDescription
     
-    // For now, return a generic object schema
-    // In a real implementation, we'd need to parse the schema's debug description
-    // or use reflection to extract the actual properties
+    // Parse different schema types from debugDescription
+    if debugDesc.contains("GenerationSchema(object:") {
+        return parseObjectSchema(from: debugDesc)
+    } else if debugDesc.contains("GenerationSchema(enum:") {
+        return parseEnumSchema(from: debugDesc)
+    } else if debugDesc.contains("GenerationSchema(array") {
+        return parseArraySchema(from: debugDesc)
+    } else if let primitiveType = extractPrimitiveType(from: debugDesc) {
+        return JSONSchema(
+            type: mapSwiftTypeToJSONType(primitiveType),
+            properties: nil,
+            required: nil
+        )
+    } else {
+        // Fallback to generic object schema
+        return JSONSchema(
+            type: "object",
+            properties: [:],
+            required: nil
+        )
+    }
+}
+
+// MARK: - Schema Parsing Helpers
+
+private func parseObjectSchema(from debugDesc: String) -> JSONSchema {
+    var properties: [String: JSONSchemaProperty] = [:]
+    var required: [String] = []
+    
+    // Extract properties from debug description
+    // Format: "GenerationSchema(object: [property1: Type1, property2: Type2])"
+    if let startIdx = debugDesc.range(of: "[")?.upperBound,
+       let endIdx = debugDesc.range(of: "]", range: startIdx..<debugDesc.endIndex)?.lowerBound {
+        
+        let propertiesStr = String(debugDesc[startIdx..<endIdx])
+        let propertyPairs = propertiesStr.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        
+        for pair in propertyPairs {
+            let components = pair.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if components.count == 2 {
+                let propertyName = components[0]
+                let propertyType = components[1]
+                
+                // Add to required list (in OpenAI, all properties are required by default)
+                required.append(propertyName)
+                
+                // Create property schema
+                properties[propertyName] = JSONSchemaProperty(
+                    type: mapSwiftTypeToJSONType(propertyType),
+                    description: nil
+                )
+            }
+        }
+    }
+    
     return JSONSchema(
         type: "object",
-        properties: [:],
+        properties: properties.isEmpty ? nil : properties,
+        required: required.isEmpty ? nil : required
+    )
+}
+
+private func parseEnumSchema(from debugDesc: String) -> JSONSchema {
+    // Extract enum values from debug description
+    // Format: "GenerationSchema(enum: [\"value1\", \"value2\"])"
+    var enumValues: [String] = []
+    
+    if let startIdx = debugDesc.range(of: "[")?.upperBound,
+       let endIdx = debugDesc.range(of: "]", range: startIdx..<debugDesc.endIndex)?.lowerBound {
+        
+        let valuesStr = String(debugDesc[startIdx..<endIdx])
+        enumValues = valuesStr
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
+    }
+    
+    // Create property with enum values
+    let property = JSONSchemaProperty(
+        type: "string",
+        enumValues: enumValues.isEmpty ? nil : enumValues
+    )
+    
+    // Return as string schema with enum constraint
+    return JSONSchema(
+        type: "string",
+        properties: ["value": property],
         required: nil
     )
 }
+
+private func parseArraySchema(from debugDesc: String) -> JSONSchema {
+    // Extract array item type from debug description
+    // Format: "GenerationSchema(array of: GenerationSchema(Type))"
+    return JSONSchema(
+        type: "array",
+        properties: nil,
+        required: nil
+    )
+}
+
+private func extractPrimitiveType(from debugDesc: String) -> String? {
+    // Match pattern like "GenerationSchema(String)" or "GenerationSchema(Int)"
+    let pattern = "GenerationSchema\\(([A-Za-z]+)\\)"
+    if let regex = try? NSRegularExpression(pattern: pattern),
+       let match = regex.firstMatch(in: debugDesc, range: NSRange(debugDesc.startIndex..., in: debugDesc)) {
+        let range = Range(match.range(at: 1), in: debugDesc)
+        if let range = range {
+            return String(debugDesc[range])
+        }
+    }
+    return nil
+}
+
+private func mapSwiftTypeToJSONType(_ swiftType: String) -> String {
+    switch swiftType.lowercased() {
+    case "string":
+        return "string"
+    case "int", "int32", "int64", "uint", "uint32", "uint64":
+        return "integer"
+    case "float", "double", "decimal":
+        return "number"
+    case "bool", "boolean":
+        return "boolean"
+    case "array":
+        return "array"
+    case "dictionary", "object":
+        return "object"
+    default:
+        return "string" // Default to string for unknown types
+    }
+}
+
+// MARK: - GeneratedContent to JSON Conversion Helper
+
+private func convertGeneratedContentToJSON(_ content: GeneratedContent) -> String {
+    // GeneratedContent is Codable, so we can encode it to JSON
+    do {
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(content)
+        return String(data: data, encoding: .utf8) ?? "{}"
+    } catch {
+        // If encoding fails, return empty JSON object
+        return "{}"
+    }
+}
+
+// MARK: - Testing Support
+
+#if DEBUG
+/// Testing support: Make conversion functions accessible for testing
+public enum SchemaConversionTesting {
+    public static func convertSchemaToJSON(_ schema: GenerationSchema) -> JSONSchema {
+        // Call the internal function directly within same file
+        return convertToJSONSchema(schema)
+    }
+    
+    public static func mapTypeToJSON(_ swiftType: String) -> String {
+        return mapSwiftTypeToJSONType(swiftType)
+    }
+    
+    public static func extractType(from debugDesc: String) -> String? {
+        return extractPrimitiveType(from: debugDesc)
+    }
+    
+    public static func parseObject(from debugDesc: String) -> JSONSchema {
+        return parseObjectSchema(from: debugDesc)
+    }
+    
+    public static func parseEnum(from debugDesc: String) -> JSONSchema {
+        return parseEnumSchema(from: debugDesc)
+    }
+    
+    public static func parseArray(from debugDesc: String) -> JSONSchema {
+        return parseArraySchema(from: debugDesc)
+    }
+}
+#endif
 
 // MARK: - Request Builder Protocol
 internal protocol RequestBuilder: Sendable {
@@ -220,18 +389,39 @@ internal extension Array where Element == ChatMessage {
                 let content = extractText(from: response.segments)
                 messages.append(ChatMessage.assistant(content))
                 
-            case .toolCalls:
+            case .toolCalls(let toolCalls):
                 // Convert tool calls to assistant message with function calls
-                // This would need proper implementation based on OpenAI's tool calling format
-                // For now, we'll create a placeholder message
-                let content = "Tool calls executed"
-                messages.append(ChatMessage.assistant(content))
+                var openAIToolCalls: [ToolCall] = []
+                for toolCall in toolCalls {
+                    // Convert GeneratedContent to JSON string
+                    let argumentsJson = convertGeneratedContentToJSON(toolCall.arguments)
+                    
+                    openAIToolCalls.append(ToolCall(
+                        id: toolCall.id,
+                        type: "function",
+                        function: ToolCall.FunctionCall(
+                            name: toolCall.toolName,
+                            arguments: argumentsJson
+                        )
+                    ))
+                }
+                
+                // Create assistant message with tool calls
+                let assistantMessage = ChatMessage(
+                    role: .assistant,
+                    content: nil,
+                    toolCalls: openAIToolCalls
+                )
+                messages.append(assistantMessage)
                 
             case .toolOutput(let toolOutput):
-                // Convert tool output to system/tool message
-                // The tool output contains the result of a tool execution
-                let content = "Tool output: \(toolOutput.toolName)"
-                messages.append(ChatMessage.system(content))
+                // Convert tool output to tool message
+                let content = extractText(from: toolOutput.segments)
+                let toolMessage = ChatMessage.tool(
+                    content: content,
+                    toolCallId: toolOutput.id
+                )
+                messages.append(toolMessage)
             }
         }
         

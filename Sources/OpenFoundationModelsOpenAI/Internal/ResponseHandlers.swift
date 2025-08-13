@@ -4,6 +4,7 @@ import Foundation
 internal protocol ResponseHandler: Sendable {
     func extractContent(from response: ChatCompletionResponse) throws -> String
     func extractStreamContent(from chunk: ChatCompletionStreamResponse) throws -> String?
+    func extractToolCalls(from response: ChatCompletionResponse) -> [ToolCall]?
     func handleError(_ error: Error, for model: OpenAIModel) -> Error
 }
 
@@ -13,6 +14,15 @@ internal struct GPTResponseHandler: ResponseHandler {
     func extractContent(from response: ChatCompletionResponse) throws -> String {
         guard let choice = response.choices.first else {
             throw OpenAIResponseError.emptyResponse
+        }
+        
+        // Check if response contains tool calls
+        if let toolCalls = choice.message.toolCalls, !toolCalls.isEmpty {
+            // Return a formatted string representation of tool calls
+            let toolCallsJson = toolCalls.map { toolCall in
+                "{\"id\": \"\(toolCall.id)\", \"function\": {\"name\": \"\(toolCall.function.name)\", \"arguments\": \(toolCall.function.arguments)}}"
+            }.joined(separator: ", ")
+            return "[\(toolCallsJson)]"
         }
         
         guard let content = choice.message.content?.text else {
@@ -30,6 +40,13 @@ internal struct GPTResponseHandler: ResponseHandler {
         return choice.delta.content
     }
     
+    func extractToolCalls(from response: ChatCompletionResponse) -> [ToolCall]? {
+        guard let choice = response.choices.first else {
+            return nil
+        }
+        return choice.message.toolCalls
+    }
+    
     func handleError(_ error: Error, for model: OpenAIModel) -> Error {
         // GPT models have standard error handling
         return mapStandardError(error, for: model)
@@ -42,6 +59,15 @@ internal struct ReasoningResponseHandler: ResponseHandler {
     func extractContent(from response: ChatCompletionResponse) throws -> String {
         guard let choice = response.choices.first else {
             throw OpenAIResponseError.emptyResponse
+        }
+        
+        // Reasoning models don't typically use tool calls, but check just in case
+        if let toolCalls = choice.message.toolCalls, !toolCalls.isEmpty {
+            // Return a formatted string representation of tool calls
+            let toolCallsJson = toolCalls.map { toolCall in
+                "{\"id\": \"\(toolCall.id)\", \"function\": {\"name\": \"\(toolCall.function.name)\", \"arguments\": \(toolCall.function.arguments)}}"
+            }.joined(separator: ", ")
+            return "[\(toolCallsJson)]"
         }
         
         guard let content = choice.message.content?.text else {
@@ -62,6 +88,13 @@ internal struct ReasoningResponseHandler: ResponseHandler {
     func handleError(_ error: Error, for model: OpenAIModel) -> Error {
         // Reasoning models may have specific error handling
         return mapReasoningError(error, for: model)
+    }
+    
+    func extractToolCalls(from response: ChatCompletionResponse) -> [ToolCall]? {
+        guard let choice = response.choices.first else {
+            return nil
+        }
+        return choice.message.toolCalls
     }
     
     private func mapReasoningError(_ error: Error, for model: OpenAIModel) -> Error {
