@@ -37,13 +37,15 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     // MARK: - LanguageModel Protocol Implementation
-    public func generate(prompt: String, options: GenerationOptions?) async throws -> String {
+    public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> String {
         try await withRateLimit { [self] in
-            let messages = [ChatMessage].from(prompt: prompt)
+            let messages = [ChatMessage].from(transcript: transcript)
+            let tools = extractTools(from: transcript)
             let request = try requestBuilder.buildChatRequest(
                 model: model,
                 messages: messages,
-                options: options
+                options: options,
+                tools: tools
             )
             
             do {
@@ -55,16 +57,18 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         }
     }
     
-    public func stream(prompt: String, options: GenerationOptions?) -> AsyncStream<String> {
+    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<String> {
         AsyncStream<String> { continuation in
             Task {
                 do {
                     try await withRateLimit { [self] in
-                        let messages = [ChatMessage].from(prompt: prompt)
+                        let messages = [ChatMessage].from(transcript: transcript)
+                        let tools = extractTools(from: transcript)
                         let request = try requestBuilder.buildStreamRequest(
                             model: model,
                             messages: messages,
-                            options: options
+                            options: options,
+                            tools: tools
                         )
                         
                         let streamHandler = StreamingHandler()
@@ -98,64 +102,16 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         return true
     }
     
-    // MARK: - Enhanced API
+    // MARK: - Transcript Helpers
     
-    /// Generate with Prompt object support
-    public func generate(prompt: Prompt, options: GenerationOptions?) async throws -> String {
-        try await withRateLimit { [self] in
-            let messages = [ChatMessage].from(prompt: prompt)
-            let request = try requestBuilder.buildChatRequest(
-                model: model,
-                messages: messages,
-                options: options
-            )
-            
-            do {
-                let response: ChatCompletionResponse = try await httpClient.send(request)
-                return try responseHandler.extractContent(from: response)
-            } catch {
-                throw responseHandler.handleError(error, for: model)
+    /// Extract tools from transcript instructions
+    private func extractTools(from transcript: Transcript) -> [Transcript.ToolDefinition]? {
+        for entry in transcript.entries {
+            if case .instructions(let instructions) = entry {
+                return instructions.toolDefinitions
             }
         }
-    }
-    
-    /// Stream with Prompt object support
-    public func stream(prompt: Prompt, options: GenerationOptions?) -> AsyncStream<String> {
-        AsyncStream<String> { continuation in
-            Task {
-                do {
-                    try await withRateLimit { [self] in
-                        let messages = [ChatMessage].from(prompt: prompt)
-                        let request = try requestBuilder.buildStreamRequest(
-                            model: model,
-                            messages: messages,
-                            options: options
-                        )
-                        
-                        let streamHandler = StreamingHandler()
-                        
-                        for try await data in await httpClient.stream(request) {
-                            do {
-                                if let chunks = try streamHandler.processStreamData(data) {
-                                    for chunk in chunks {
-                                        if let content = try responseHandler.extractStreamContent(from: chunk) {
-                                            continuation.yield(content)
-                                        }
-                                    }
-                                }
-                            } catch {
-                                continuation.finish()
-                                return
-                            }
-                        }
-                        
-                        continuation.finish()
-                    }
-                } catch {
-                    continuation.finish()
-                }
-            }
-        }
+        return nil
     }
     
     /// Get model information
@@ -181,7 +137,8 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             let request = try requestBuilder.buildChatRequest(
                 model: model,
                 messages: [ChatMessage.user("test")],
-                options: GenerationOptions(maximumResponseTokens: 1)
+                options: GenerationOptions(maximumResponseTokens: 1),
+                tools: nil
             )
             
             let _: ChatCompletionResponse = try await httpClient.send(request)

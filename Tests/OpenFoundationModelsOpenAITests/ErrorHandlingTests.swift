@@ -95,10 +95,11 @@ struct ErrorHandlingTests {
         )
         let model = OpenAIModel.o1
         
-        let mappedError = handler.handleError(standardError, for: model)
+        let _ = handler.handleError(standardError, for: model)
         
         // Should fall back to standard error mapping
-        #expect(mappedError != nil, "Should handle standard errors")
+        // The handler returns an Error (always non-nil)
+        // This test verifies the fallback path doesn't crash
     }
     
     // MARK: - OpenAI Model Error Type Tests
@@ -315,8 +316,10 @@ struct ErrorHandlingTests {
         
         let mappedError = handler.handleError(unknownError, for: model)
         
-        #expect(mappedError is NSError, "Should preserve unknown errors")
-        #expect((mappedError as NSError).code == 999, "Should preserve error code")
+        // Any Error can be bridged to NSError, so we can safely cast
+        let nsError = mappedError as NSError
+        #expect(nsError.code == 999, "Should preserve error code")
+        #expect(nsError.domain == "TestDomain", "Should preserve error domain")
     }
     
     @Test("Response handler types are created correctly")

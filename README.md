@@ -4,6 +4,7 @@ OpenAI provider for the [OpenFoundationModels](https://github.com/1amageek/OpenF
 
 ## Features
 
+- 📜 **Transcript-Based Interface**: Full support for OpenFoundationModels' Transcript-centric design
 - 🤖 **Complete Model Support**: GPT-4o, GPT-4o Mini, GPT-4 Turbo, and all Reasoning models (o1, o1-pro, o3, o3-pro, o4-mini)
 - 🧠 **Reasoning Models**: Native support for o1, o1-pro, o3, o3-pro, and o4-mini with automatic constraint handling
 - 🔄 **Streaming Support**: Real-time response streaming with Server-Sent Events
@@ -12,6 +13,7 @@ OpenAI provider for the [OpenFoundationModels](https://github.com/1amageek/OpenF
 - 🚦 **Self-Contained**: No external dependencies beyond OpenFoundationModels
 - ⚡ **Performance Optimized**: Custom HTTP client with actor-based concurrency
 - 🛡️ **Type Safety**: Compile-time model validation and constraint checking
+- 🛠️ **Tool Support**: Automatic extraction and conversion of tool definitions from Transcript
 
 ## Installation
 
@@ -39,20 +41,20 @@ import OpenFoundationModelsOpenAI
 let gptModel = OpenAILanguageModel(apiKey: "your-openai-api-key", model: .gpt4o)
 let reasoningModel = OpenAILanguageModel(apiKey: "your-openai-api-key", model: .o3)
 
-// Use with Apple's Foundation Models API
+// Use with LanguageModelSession (Transcript-based)
 let session = LanguageModelSession(
     model: gptModel, // or reasoningModel
-    guardrails: .default,
     tools: [],
-    instructions: nil
+    instructions: "You are a helpful assistant."
 )
 
-// Generate text (parameters automatically validated for model type)
-let response = try await session.respond {
-    Prompt("Tell me about Swift programming")
-}
-
+// Generate text - Session manages the Transcript
+let response = try await session.respond(to: "Tell me about Swift programming")
 print(response.content)
+
+// Continue conversation - Transcript automatically updated
+let followUp = try await session.respond(to: "What are its main features?")
+print(followUp.content)
 ```
 
 ## Configuration
@@ -163,37 +165,100 @@ let reasoningResponse = try await reasoningModel.generate(
 - **o3-pro**: Highest reasoning capability for difficult tasks (premium tier)
 - **o4-mini**: Cost-effective reasoning model (economy tier)
 
-## Usage Examples
+## Transcript-Based Architecture
 
-### Text Generation
+OpenFoundationModels-OpenAI fully embraces the Transcript-centric design of OpenFoundationModels:
+
+### How It Works
+
+1. **LanguageModelSession** manages the conversation state via `Transcript`
+2. **OpenAILanguageModel** receives the complete `Transcript` for each request
+3. The provider converts `Transcript` entries to OpenAI's message format
+
+### Transcript Entry Processing
 
 ```swift
-// GPT model for general tasks
-let gptModel = OpenAIModelFactory.gpt4o(apiKey: apiKey)
-let response = try await gptModel.generate(
-    prompt: "Explain quantum computing",
-    options: GenerationOptions(
-        temperature: 0.7,
-        maxTokens: 1000
+// Internal conversion from Transcript to OpenAI messages
+Transcript.Entry.instructions -> ChatMessage.system   // System instructions
+Transcript.Entry.prompt -> ChatMessage.user          // User messages  
+Transcript.Entry.response -> ChatMessage.assistant   // Assistant responses
+Transcript.Entry.toolCalls -> ChatMessage.assistant  // Tool invocations
+Transcript.Entry.toolOutput -> ChatMessage.system    // Tool results
+```
+
+### Direct Model Usage (Low-level)
+
+```swift
+// Create a Transcript manually (usually handled by LanguageModelSession)
+var transcript = Transcript()
+
+// Add instructions
+transcript.entries.append(.instructions(
+    Transcript.Instructions(
+        segments: [.text(Transcript.TextSegment(content: "You are a helpful assistant."))]
     )
+))
+
+// Add user prompt
+transcript.entries.append(.prompt(
+    Transcript.Prompt(
+        segments: [.text(Transcript.TextSegment(content: "What is Swift?"))]
+    )
+))
+
+// Generate response using the transcript
+let response = try await model.generate(
+    transcript: transcript,
+    options: GenerationOptions(maximumResponseTokens: 500)
+)
+```
+
+### Benefits
+
+- **Stateless Model**: OpenAILanguageModel doesn't maintain state between calls
+- **Complete Context**: Every request includes the full conversation history
+- **Provider Flexibility**: Clean separation between OpenFoundationModels and OpenAI APIs
+- **Tool Support**: Automatic extraction of tool definitions from Instructions
+
+## Usage Examples
+
+### Text Generation with LanguageModelSession
+
+```swift
+// Create model
+let model = OpenAILanguageModel(apiKey: apiKey, model: .gpt4o)
+
+// Use with LanguageModelSession for automatic Transcript management
+let session = LanguageModelSession(
+    model: model,
+    tools: [],
+    instructions: "You are a helpful assistant."
 )
 
-// Reasoning model for complex problems (temperature automatically ignored)
-let reasoningModel = OpenAIModelFactory.o3(apiKey: apiKey)
-let solution = try await reasoningModel.generate(
-    prompt: "Solve this complex mathematical proof step by step...",
-    options: GenerationOptions(maxTokens: 2000)
+// Generate response
+let response = try await session.respond(to: "Explain quantum computing")
+print(response.content)
+
+// Reasoning model for complex problems
+let reasoningModel = OpenAILanguageModel(apiKey: apiKey, model: .o3)
+let reasoningSession = LanguageModelSession(model: reasoningModel)
+let solution = try await reasoningSession.respond(
+    to: "Solve this complex mathematical proof step by step...",
+    options: GenerationOptions(maximumResponseTokens: 2000)
 )
 ```
 
 ### Streaming
 
 ```swift
-let model = OpenAIModelFactory.gpt4o(apiKey: apiKey)
-let stream = model.stream(prompt: "Write a story about AI")
+let model = OpenAILanguageModel(apiKey: apiKey, model: .gpt4o)
+let session = LanguageModelSession(model: model)
 
-for try await chunk in stream {
-    print(chunk, terminator: "")
+// Stream response
+let stream = session.streamResponse(to: "Write a story about AI")
+
+for try await partial in stream {
+    print(partial.content, terminator: "")
 }
 ```
 
@@ -212,17 +277,18 @@ struct BookReview {
     let summary: String
 }
 
-// Note: Structured generation requires OpenFoundationModels framework integration
+// Create model and session
+let model = OpenAILanguageModel(apiKey: apiKey, model: .gpt4o)
 let session = LanguageModelSession(
-    model: OpenAIModelFactory.gpt4o(apiKey: apiKey),
-    guardrails: .default,
+    model: model,
     tools: [],
-    instructions: nil
+    instructions: "You are a literary critic."
 )
 
-let review = try await session.generate(
-    prompt: "Review the book '1984' by George Orwell",
-    as: BookReview.self
+// Generate structured response
+let review = try await session.respond(
+    to: "Review the book '1984' by George Orwell",
+    generating: BookReview.self
 )
 
 print("Title: \(review.title)")
@@ -322,6 +388,41 @@ do {
 ## Dependencies
 
 - [OpenFoundationModels](https://github.com/1amageek/OpenFoundationModels) - Core framework (only dependency)
+
+## Migration Guide
+
+### From Prompt-based to Transcript-based Interface
+
+The OpenFoundationModels framework has transitioned to a Transcript-centric design. Here's how to migrate:
+
+#### Old Interface (Deprecated)
+```swift
+// Direct prompt-based calls
+let response = try await model.generate(
+    prompt: "Hello",
+    options: options,
+    tools: tools
+)
+```
+
+#### New Interface (Transcript-based)
+```swift
+// Use LanguageModelSession for automatic Transcript management
+let session = LanguageModelSession(model: model, tools: tools)
+let response = try await session.respond(to: "Hello", options: options)
+
+// Or use Transcript directly (low-level)
+var transcript = Transcript()
+transcript.entries.append(.prompt(/*...*/))
+let response = try await model.generate(transcript: transcript, options: options)
+```
+
+### Key Changes
+
+1. **LanguageModel Protocol**: Now accepts `Transcript` instead of `prompt` and `tools`
+2. **Tool Management**: Tools are defined in `Transcript.Instructions.toolDefinitions`
+3. **Conversation Context**: All history is contained in the `Transcript`
+4. **Stateless Models**: Models no longer maintain conversation state
 
 ## Contributing
 

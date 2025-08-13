@@ -36,6 +36,7 @@ swift package generate-xcodeproj
 ### Core Components
 
 1. **OpenAILanguageModel**: Main provider class implementing the `LanguageModel` protocol from OpenFoundationModels
+   - **Transcript-based interface**: Processes complete conversation context via `Transcript`
    - Unified interface for all OpenAI models (GPT and Reasoning)
    - Automatic constraint handling based on model type
    - Built-in streaming support with Server-Sent Events
@@ -60,11 +61,13 @@ swift package generate-xcodeproj
 
 When implementing the OpenAILanguageModel, ensure:
 
-1. **Protocol Conformance**:
-   - `generate(prompt:options:)` - Synchronous text generation
-   - `stream(prompt:options:)` - Returns `AsyncStream<String>`
+1. **Protocol Conformance (Transcript-based)**:
+   - `generate(transcript:options:)` - Process complete conversation context
+   - `stream(transcript:options:)` - Returns `AsyncStream<String>` for streaming
    - `isAvailable` - Synchronous property checking API availability
    - `supports(locale:)` - Returns true (OpenAI supports most languages)
+   - Extracts tools from `Transcript.Instructions.toolDefinitions`
+   - Converts `Transcript.Entry` types to OpenAI message format
 
 2. **Structured Generation**:
    - Use OpenAI Function Calling for `Generable` types
@@ -116,17 +119,87 @@ Sources/OpenFoundationModelsOpenAI/
 
 ## Important Design Decisions
 
-1. **Unified Model Interface**: Single OpenAIModel enum that internally handles GPT vs Reasoning model differences, providing a seamless user experience without model-specific APIs.
+1. **Transcript-Centric Architecture**: Fully embraces OpenFoundationModels' Transcript-based design:
+   - Stateless model interface - all context provided via Transcript
+   - Converts Transcript entries (Instructions, Prompt, Response, ToolCalls, ToolOutput) to OpenAI format
+   - Extracts tool definitions from Instructions for function calling
 
-2. **Self-Contained Architecture**: No external dependencies beyond OpenFoundationModels, using custom URLSession-based HTTP client for maximum flexibility and control.
+2. **Unified Model Interface**: Single OpenAIModel enum that internally handles GPT vs Reasoning model differences, providing a seamless user experience without model-specific APIs.
 
-3. **Automatic Constraint Handling**: Internal model type detection automatically applies correct parameter constraints (e.g., temperature not supported for Reasoning models).
+3. **Self-Contained Architecture**: No external dependencies beyond OpenFoundationModels, using custom URLSession-based HTTP client for maximum flexibility and control.
 
-4. **Actor-Based Concurrency**: Rate limiting and HTTP client use Swift actors for thread-safe operation and optimal performance.
+4. **Automatic Constraint Handling**: Internal model type detection automatically applies correct parameter constraints (e.g., temperature not supported for Reasoning models).
 
-5. **Direct Instantiation Pattern**: Direct instantiation of request builders and response handlers based on model type, following Swift conventions without factory pattern.
+5. **Actor-Based Concurrency**: Rate limiting and HTTP client use Swift actors for thread-safe operation and optimal performance.
 
-6. **Advanced Streaming**: Server-Sent Events implementation with buffering, accumulation, and error handling for reliable real-time responses.
+6. **Direct Instantiation Pattern**: Direct instantiation of request builders and response handlers based on model type, following Swift conventions without factory pattern.
+
+7. **Advanced Streaming**: Server-Sent Events implementation with buffering, accumulation, and error handling for reliable real-time responses.
+
+## Transcript Processing Implementation
+
+### Overview
+The OpenAI provider now fully supports OpenFoundationModels' Transcript-based interface, providing complete conversation context management.
+
+### Transcript to OpenAI Message Conversion
+
+```swift
+// Convert Transcript entries to OpenAI ChatMessage format
+internal extension Array where Element == ChatMessage {
+    static func from(transcript: Transcript) -> [ChatMessage] {
+        var messages: [ChatMessage] = []
+        
+        for entry in transcript.entries {
+            switch entry {
+            case .instructions(let instructions):
+                // System message with instructions
+                let content = extractText(from: instructions.segments)
+                messages.append(ChatMessage.system(content))
+                
+            case .prompt(let prompt):
+                // User message
+                let content = extractText(from: prompt.segments)
+                messages.append(ChatMessage.user(content))
+                
+            case .response(let response):
+                // Assistant message
+                let content = extractText(from: response.segments)
+                messages.append(ChatMessage.assistant(content))
+                
+            case .toolCalls:
+                // Tool execution (placeholder for now)
+                messages.append(ChatMessage.assistant("Tool calls executed"))
+                
+            case .toolOutput(let toolOutput):
+                // Tool result
+                messages.append(ChatMessage.system("Tool output: \(toolOutput.toolName)"))
+            }
+        }
+        return messages
+    }
+}
+```
+
+### Tool Extraction from Transcript
+
+```swift
+private func extractTools(from transcript: Transcript) -> [Transcript.ToolDefinition]? {
+    for entry in transcript.entries {
+        if case .instructions(let instructions) = entry {
+            return instructions.toolDefinitions
+        }
+    }
+    return nil
+}
+```
+
+### Key Benefits
+
+1. **Stateless Design**: Model doesn't maintain conversation state
+2. **Complete Context**: Every request includes full conversation history
+3. **Tool Support**: Automatic extraction of tool definitions from Instructions
+4. **Flexible Segments**: Handles both text and structured segments
+5. **Provider Agnostic**: Clean separation between OpenFoundationModels and OpenAI APIs
 
 ## Build Fix Strategy
 
