@@ -372,7 +372,7 @@ internal extension Array where Element == ChatMessage {
     static func from(transcript: Transcript) -> [ChatMessage] {
         var messages: [ChatMessage] = []
         
-        for entry in transcript.entries {
+        for entry in transcript {
             switch entry {
             case .instructions(let instructions):
                 // Convert instructions to system message
@@ -391,15 +391,15 @@ internal extension Array where Element == ChatMessage {
                 
             case .toolCalls(let toolCalls):
                 // Convert tool calls to assistant message with function calls
-                var openAIToolCalls: [ToolCall] = []
+                var openAIToolCalls: [OpenAIToolCall] = []
                 for toolCall in toolCalls {
                     // Convert GeneratedContent to JSON string
                     let argumentsJson = convertGeneratedContentToJSON(toolCall.arguments)
                     
-                    openAIToolCalls.append(ToolCall(
+                    openAIToolCalls.append(OpenAIToolCall(
                         id: toolCall.id,
                         type: "function",
-                        function: ToolCall.FunctionCall(
+                        function: OpenAIToolCall.FunctionCall(
                             name: toolCall.toolName,
                             arguments: argumentsJson
                         )

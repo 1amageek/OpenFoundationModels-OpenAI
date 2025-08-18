@@ -4,7 +4,7 @@ import Foundation
 internal protocol ResponseHandler: Sendable {
     func extractContent(from response: ChatCompletionResponse) throws -> String
     func extractStreamContent(from chunk: ChatCompletionStreamResponse) throws -> String?
-    func extractToolCalls(from response: ChatCompletionResponse) -> [ToolCall]?
+    func extractToolCalls(from response: ChatCompletionResponse) -> [OpenAIToolCall]?
     func handleError(_ error: Error, for model: OpenAIModel) -> Error
 }
 
@@ -40,7 +40,7 @@ internal struct GPTResponseHandler: ResponseHandler {
         return choice.delta.content
     }
     
-    func extractToolCalls(from response: ChatCompletionResponse) -> [ToolCall]? {
+    func extractToolCalls(from response: ChatCompletionResponse) -> [OpenAIToolCall]? {
         guard let choice = response.choices.first else {
             return nil
         }
@@ -90,7 +90,7 @@ internal struct ReasoningResponseHandler: ResponseHandler {
         return mapReasoningError(error, for: model)
     }
     
-    func extractToolCalls(from response: ChatCompletionResponse) -> [ToolCall]? {
+    func extractToolCalls(from response: ChatCompletionResponse) -> [OpenAIToolCall]? {
         guard let choice = response.choices.first else {
             return nil
         }

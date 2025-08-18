@@ -81,14 +81,14 @@ public struct ChatMessage: Codable, Sendable {
     public let role: Role
     public let content: Content?
     public let name: String?
-    public let toolCalls: [ToolCall]?
+    public let toolCalls: [OpenAIToolCall]?
     public let toolCallId: String?
     
     public init(
         role: Role,
         content: Content? = nil,
         name: String? = nil,
-        toolCalls: [ToolCall]? = nil,
+        toolCalls: [OpenAIToolCall]? = nil,
         toolCallId: String? = nil
     ) {
         self.role = role
@@ -361,7 +361,7 @@ public enum ToolChoice: Codable, Sendable {
 }
 
 // MARK: - Tool Call
-public struct ToolCall: Codable, Sendable {
+public struct OpenAIToolCall: Codable, Sendable {
     public let id: String
     public let type: String
     public let function: FunctionCall
@@ -490,7 +490,7 @@ public struct ChatCompletionStreamResponse: Codable, Sendable {
         public struct Delta: Codable, Sendable {
             public let role: String?
             public let content: String?
-            public let toolCalls: [ToolCall]?
+            public let toolCalls: [OpenAIToolCall]?
             
             enum CodingKeys: String, CodingKey {
                 case role, content

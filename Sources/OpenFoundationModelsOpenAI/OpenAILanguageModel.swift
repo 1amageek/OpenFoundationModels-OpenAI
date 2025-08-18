@@ -37,7 +37,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     // MARK: - LanguageModel Protocol Implementation
-    public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> String {
+    public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> Transcript.Entry {
         try await withRateLimit { [self] in
             let messages = [ChatMessage].from(transcript: transcript)
             let tools = extractTools(from: transcript)
@@ -50,15 +50,30 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             
             do {
                 let response: ChatCompletionResponse = try await httpClient.send(request)
-                return try responseHandler.extractContent(from: response)
+                
+                // Check if response contains tool calls
+                if let toolCalls = responseHandler.extractToolCalls(from: response),
+                   !toolCalls.isEmpty {
+                    // Convert OpenAI tool calls to Transcript.ToolCalls
+                    let transcriptToolCalls = convertToTranscriptToolCalls(toolCalls)
+                    return .toolCalls(transcriptToolCalls)
+                }
+                
+                // Otherwise, extract text content and return as response
+                let content = try responseHandler.extractContent(from: response)
+                let responseEntry = Transcript.Response(
+                    assetIDs: [],
+                    segments: [.text(Transcript.TextSegment(content: content))]
+                )
+                return .response(responseEntry)
             } catch {
                 throw responseHandler.handleError(error, for: model)
             }
         }
     }
     
-    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<String> {
-        AsyncStream<String> { continuation in
+    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<Transcript.Entry> {
+        AsyncStream<Transcript.Entry> { continuation in
             Task {
                 do {
                     try await withRateLimit { [self] in
@@ -72,13 +87,53 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         )
                         
                         let streamHandler = StreamingHandler()
+                        var accumulatedContent = ""
+                        var accumulatedToolCalls: [OpenAIToolCall] = []
                         
                         for try await data in await httpClient.stream(request) {
                             do {
                                 if let chunks = try streamHandler.processStreamData(data) {
                                     for chunk in chunks {
-                                        if let content = try responseHandler.extractStreamContent(from: chunk) {
-                                            continuation.yield(content)
+                                        // Check if this is a tool call response
+                                        if let choice = chunk.choices.first {
+                                            // Handle tool calls in stream
+                                            let delta = choice.delta
+                                            if let toolCalls = delta.toolCalls {
+                                                // Accumulate tool calls
+                                                for toolCall in toolCalls {
+                                                    if let existingIndex = accumulatedToolCalls.firstIndex(where: { $0.id == toolCall.id }) {
+                                                        // Update existing tool call by appending arguments
+                                                        let existing = accumulatedToolCalls[existingIndex]
+                                                        let updatedToolCall = OpenAIToolCall(
+                                                            id: existing.id,
+                                                            type: existing.type,
+                                                            function: OpenAIToolCall.FunctionCall(
+                                                                name: existing.function.name,
+                                                                arguments: existing.function.arguments + toolCall.function.arguments
+                                                            )
+                                                        )
+                                                        accumulatedToolCalls[existingIndex] = updatedToolCall
+                                                    } else {
+                                                        // Add new tool call
+                                                        accumulatedToolCalls.append(toolCall)
+                                                    }
+                                                }
+                                            } else if let content = delta.content {
+                                                // Regular content
+                                                accumulatedContent += content
+                                                let responseEntry = Transcript.Response(
+                                                    assetIDs: [],
+                                                    segments: [.text(Transcript.TextSegment(content: accumulatedContent))]
+                                                )
+                                                continuation.yield(.response(responseEntry))
+                                            }
+                                            
+                                            // Check for finish reason
+                                            if choice.finishReason == "tool_calls" && !accumulatedToolCalls.isEmpty {
+                                                // Yield the accumulated tool calls
+                                                let transcriptToolCalls = convertToTranscriptToolCalls(accumulatedToolCalls)
+                                                continuation.yield(.toolCalls(transcriptToolCalls))
+                                            }
                                         }
                                     }
                                 }
@@ -106,7 +161,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     /// Extract tools from transcript instructions
     private func extractTools(from transcript: Transcript) -> [Transcript.ToolDefinition]? {
-        for entry in transcript.entries {
+        for entry in transcript {
             if case .instructions(let instructions) = entry {
                 return instructions.toolDefinitions
             }
@@ -296,5 +351,70 @@ extension OpenAILanguageModel {
         throw lastError ?? OpenAIModelError.apiError(
             OpenAIAPIError(message: "Max retry attempts exceeded", type: nil, param: nil, code: nil)
         )
+    }
+}
+
+// MARK: - ToolCall Conversion Helpers
+extension OpenAILanguageModel {
+    
+    /// Convert OpenAI ToolCalls to Transcript.ToolCalls
+    private func convertToTranscriptToolCalls(_ openAIToolCalls: [OpenAIToolCall]) -> Transcript.ToolCalls {
+        let transcriptToolCalls = openAIToolCalls.map { toolCall in
+            // Parse the arguments JSON string to GeneratedContent
+            let argumentsContent: GeneratedContent
+            if let jsonData = toolCall.function.arguments.data(using: .utf8) {
+                do {
+                    let jsonObject = try JSONSerialization.jsonObject(with: jsonData)
+                    argumentsContent = convertJSONToGeneratedContent(jsonObject)
+                } catch {
+                    // If parsing fails, create empty structure
+                    argumentsContent = GeneratedContent(kind: .structure(properties: [:], orderedKeys: []))
+                }
+            } else {
+                argumentsContent = GeneratedContent(kind: .structure(properties: [:], orderedKeys: []))
+            }
+            
+            return Transcript.ToolCall(
+                id: toolCall.id,
+                toolName: toolCall.function.name,
+                arguments: argumentsContent
+            )
+        }
+        
+        return Transcript.ToolCalls(transcriptToolCalls)
+    }
+    
+    /// Convert JSON object to GeneratedContent
+    private func convertJSONToGeneratedContent(_ json: Any) -> GeneratedContent {
+        switch json {
+        case let string as String:
+            return GeneratedContent(kind: .string(string))
+        case let number as NSNumber:
+            if number.isBool {
+                return GeneratedContent(kind: .bool(number.boolValue))
+            } else {
+                return GeneratedContent(kind: .number(number.doubleValue))
+            }
+        case let array as [Any]:
+            let elements = array.map { convertJSONToGeneratedContent($0) }
+            return GeneratedContent(kind: .array(elements))
+        case let dict as [String: Any]:
+            let properties = dict.mapValues { convertJSONToGeneratedContent($0) }
+            let orderedKeys = Array(dict.keys).sorted()
+            return GeneratedContent(kind: .structure(properties: properties, orderedKeys: orderedKeys))
+        case is NSNull:
+            return GeneratedContent(kind: .null)
+        default:
+            return GeneratedContent(kind: .null)
+        }
+    }
+}
+
+// MARK: - NSNumber Bool Detection Extension
+private extension NSNumber {
+    var isBool: Bool {
+        let boolID = CFBooleanGetTypeID()
+        let numID = CFGetTypeID(self)
+        return numID == boolID
     }
 }
