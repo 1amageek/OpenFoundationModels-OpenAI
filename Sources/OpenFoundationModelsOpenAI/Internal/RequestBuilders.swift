@@ -3,8 +3,30 @@ import OpenFoundationModels
 
 // MARK: - Schema Conversion Helper
 internal func convertToJSONSchema(_ schema: GenerationSchema) -> JSONSchema {
-    // Parse the schema's debug description to extract structure
-    // This is necessary because GenerationSchema's internal structure is not publicly accessible
+    // Encode GenerationSchema to JSON and extract properties
+    do {
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(schema)
+        
+        if let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            return parseSchemaJSON(json)
+        }
+    } catch {
+        // If encoding fails, try parsing debug description as fallback
+        print("Warning: Failed to encode GenerationSchema to JSON: \(error)")
+        return parseSchemaFromDebugDescription(schema)
+    }
+    
+    // Final fallback: return empty object schema
+    return JSONSchema(
+        type: "object",
+        properties: [:],
+        required: nil
+    )
+}
+
+// MARK: - Schema Parsing from Debug Description (Fallback)
+internal func parseSchemaFromDebugDescription(_ schema: GenerationSchema) -> JSONSchema {
     let debugDesc = schema.debugDescription
     
     // Parse different schema types from debugDescription
@@ -28,6 +50,51 @@ internal func convertToJSONSchema(_ schema: GenerationSchema) -> JSONSchema {
             required: nil
         )
     }
+}
+
+// MARK: - Schema Parsing from JSON
+
+private func parseSchemaJSON(_ json: [String: Any]) -> JSONSchema {
+    // Extract type (default to "object")
+    let type = json["type"] as? String ?? "object"
+    
+    // Extract properties if available
+    var schemaProperties: [String: JSONSchemaProperty] = [:]
+    if let properties = json["properties"] as? [String: [String: Any]] {
+        for (key, propJson) in properties {
+            let propType = propJson["type"] as? String ?? "string"
+            let propDescription = propJson["description"] as? String
+            let enumValues = propJson["enum"] as? [String]
+            
+            // Handle array items
+            var items: JSONSchemaProperty? = nil
+            if propType == "array",
+               let itemsJson = propJson["items"] as? [String: Any] {
+                let itemType = itemsJson["type"] as? String ?? "string"
+                items = JSONSchemaProperty(
+                    type: itemType,
+                    description: itemsJson["description"] as? String
+                )
+            }
+            
+            schemaProperties[key] = JSONSchemaProperty(
+                type: propType,
+                description: propDescription,
+                enumValues: enumValues,
+                items: items
+            )
+        }
+    }
+    
+    // Extract required fields
+    let required = json["required"] as? [String]
+    
+    return JSONSchema(
+        type: type,
+        properties: schemaProperties.isEmpty ? nil : schemaProperties,
+        required: required,
+        description: json["description"] as? String
+    )
 }
 
 // MARK: - Schema Parsing Helpers
@@ -245,7 +312,8 @@ internal struct GPTRequestBuilder: RequestBuilder {
         messages: [ChatMessage],
         options: GenerationOptions?,
         tools: [Transcript.ToolDefinition]?,
-        stream: Bool
+        stream: Bool,
+        responseFormat: ResponseFormat? = nil
     ) throws -> ChatCompletionRequest {
         _ = model.constraints  // For future constraint validation
         let validatedOptions = validateOptions(options, for: model)
@@ -263,8 +331,10 @@ internal struct GPTRequestBuilder: RequestBuilder {
             model: model.apiName,
             messages: messages,
             temperature: validatedOptions?.temperature,
+            maxTokens: validatedOptions?.maximumResponseTokens,
             stream: stream ? true : nil,
-            tools: openAITools
+            tools: openAITools,
+            responseFormat: responseFormat
         )
     }
     
@@ -328,7 +398,8 @@ internal struct ReasoningRequestBuilder: RequestBuilder {
         messages: [ChatMessage],
         options: GenerationOptions?,
         tools: [Transcript.ToolDefinition]?,
-        stream: Bool
+        stream: Bool,
+        responseFormat: ResponseFormat? = nil
     ) throws -> ChatCompletionRequest {
         // Reasoning models use max_completion_tokens instead of max_tokens
         // Note: Reasoning models typically don't support tools/function calling
@@ -343,8 +414,10 @@ internal struct ReasoningRequestBuilder: RequestBuilder {
         return ChatCompletionRequest(
             model: model.apiName,
             messages: messages,
+            maxCompletionTokens: options?.maximumResponseTokens,
             stream: stream ? true : nil,
-            tools: openAITools
+            tools: openAITools,
+            responseFormat: responseFormat
         )
     }
     
@@ -370,76 +443,8 @@ internal struct ReasoningRequestBuilder: RequestBuilder {
 // MARK: - Transcript to ChatMessage Conversion
 internal extension Array where Element == ChatMessage {
     static func from(transcript: Transcript) -> [ChatMessage] {
-        var messages: [ChatMessage] = []
-        
-        for entry in transcript {
-            switch entry {
-            case .instructions(let instructions):
-                // Convert instructions to system message
-                let content = extractText(from: instructions.segments)
-                messages.append(ChatMessage.system(content))
-                
-            case .prompt(let prompt):
-                // Convert prompt to user message
-                let content = extractText(from: prompt.segments)
-                messages.append(ChatMessage.user(content))
-                
-            case .response(let response):
-                // Convert response to assistant message
-                let content = extractText(from: response.segments)
-                messages.append(ChatMessage.assistant(content))
-                
-            case .toolCalls(let toolCalls):
-                // Convert tool calls to assistant message with function calls
-                var openAIToolCalls: [OpenAIToolCall] = []
-                for toolCall in toolCalls {
-                    // Convert GeneratedContent to JSON string
-                    let argumentsJson = convertGeneratedContentToJSON(toolCall.arguments)
-                    
-                    openAIToolCalls.append(OpenAIToolCall(
-                        id: toolCall.id,
-                        type: "function",
-                        function: OpenAIToolCall.FunctionCall(
-                            name: toolCall.toolName,
-                            arguments: argumentsJson
-                        )
-                    ))
-                }
-                
-                // Create assistant message with tool calls
-                let assistantMessage = ChatMessage(
-                    role: .assistant,
-                    content: nil,
-                    toolCalls: openAIToolCalls
-                )
-                messages.append(assistantMessage)
-                
-            case .toolOutput(let toolOutput):
-                // Convert tool output to tool message
-                let content = extractText(from: toolOutput.segments)
-                let toolMessage = ChatMessage.tool(
-                    content: content,
-                    toolCallId: toolOutput.id
-                )
-                messages.append(toolMessage)
-            }
-        }
-        
-        return messages
-    }
-    
-    private static func extractText(from segments: [Transcript.Segment]) -> String {
-        return segments.compactMap { segment in
-            // Extract text from each segment
-            switch segment {
-            case .text(let textSegment):
-                return textSegment.content
-            case .structure:
-                // Handle structured content if needed
-                // For now, return nil to skip structured segments
-                return nil
-            }
-        }.joined(separator: " ")
+        // Use TranscriptConverter for consistency
+        return TranscriptConverter.buildMessages(from: transcript)
     }
     
     static func from(prompt: String) -> [ChatMessage] {

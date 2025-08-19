@@ -19,6 +19,112 @@ public final class Box<T>: Codable, Sendable where T: Codable & Sendable {
     }
 }
 
+// MARK: - Response Format
+
+/// Response format specification for OpenAI API
+public enum ResponseFormat: Codable, @unchecked Sendable {
+    case text
+    case json
+    case jsonSchema([String: Any])
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        
+        if let type = try? container.decode([String: String].self),
+           let formatType = type["type"] {
+            switch formatType {
+            case "text":
+                self = .text
+            case "json_object":
+                self = .json
+            default:
+                self = .text
+            }
+        } else if let schemaDict = try? container.decode([String: AnyCodable].self) {
+            self = .jsonSchema(schemaDict.mapValues { $0.value })
+        } else {
+            self = .text
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        
+        switch self {
+        case .text:
+            try container.encode(["type": "text"])
+        case .json:
+            try container.encode(["type": "json_object"])
+        case .jsonSchema(let schema):
+            // Encode JSON Schema with proper structure
+            let responseFormat: [String: Any] = [
+                "type": "json_schema",
+                "json_schema": [
+                    "name": "response",
+                    "strict": true,
+                    "schema": schema
+                ]
+            ]
+            // Convert to AnyCodable for encoding
+            try container.encode(AnyCodable(responseFormat))
+        }
+    }
+}
+
+// MARK: - AnyCodable Helper
+
+/// Helper type for encoding/decoding Any values
+private struct AnyCodable: Codable {
+    let value: Any
+    
+    init(_ value: Any) {
+        self.value = value
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        
+        if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([AnyCodable].self) {
+            value = array.map { $0.value }
+        } else if let dict = try? container.decode([String: AnyCodable].self) {
+            value = dict.mapValues { $0.value }
+        } else {
+            value = NSNull()
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        
+        switch value {
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case let string as String:
+            try container.encode(string)
+        case let array as [Any]:
+            try container.encode(array.map { AnyCodable($0) })
+        case let dict as [String: Any]:
+            try container.encode(dict.mapValues { AnyCodable($0) })
+        case is NSNull:
+            try container.encodeNil()
+        default:
+            try container.encode(String(describing: value))
+        }
+    }
+}
+
 // MARK: - Chat Completion Request
 public struct ChatCompletionRequest: Codable, Sendable {
     public let model: String
@@ -33,6 +139,7 @@ public struct ChatCompletionRequest: Codable, Sendable {
     public let presencePenalty: Double?
     public let tools: [Tool]?
     public let toolChoice: ToolChoice?
+    public let responseFormat: ResponseFormat?
     public let user: String?
     
     public init(
@@ -48,6 +155,7 @@ public struct ChatCompletionRequest: Codable, Sendable {
         presencePenalty: Double? = nil,
         tools: [Tool]? = nil,
         toolChoice: ToolChoice? = nil,
+        responseFormat: ResponseFormat? = nil,
         user: String? = nil
     ) {
         self.model = model
@@ -62,6 +170,7 @@ public struct ChatCompletionRequest: Codable, Sendable {
         self.presencePenalty = presencePenalty
         self.tools = tools
         self.toolChoice = toolChoice
+        self.responseFormat = responseFormat
         self.user = user
     }
     
@@ -73,6 +182,7 @@ public struct ChatCompletionRequest: Codable, Sendable {
         case frequencyPenalty = "frequency_penalty"
         case presencePenalty = "presence_penalty"
         case toolChoice = "tool_choice"
+        case responseFormat = "response_format"
     }
 }
 

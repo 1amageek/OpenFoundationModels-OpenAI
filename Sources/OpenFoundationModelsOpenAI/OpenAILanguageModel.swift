@@ -39,13 +39,20 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     // MARK: - LanguageModel Protocol Implementation
     public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> Transcript.Entry {
         try await withRateLimit { [self] in
-            let messages = [ChatMessage].from(transcript: transcript)
-            let tools = extractTools(from: transcript)
-            let request = try requestBuilder.buildChatRequest(
+            // Use TranscriptConverter for all conversions
+            let messages = TranscriptConverter.buildMessages(from: transcript)
+            let tools = TranscriptConverter.extractTools(from: transcript)
+            let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+            let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
+            
+            // Build request with response format if present
+            let request = try buildChatRequestWithFormat(
                 model: model,
                 messages: messages,
-                options: options,
-                tools: tools
+                options: finalOptions,
+                tools: tools,
+                responseFormat: responseFormat,
+                stream: false
             )
             
             do {
@@ -77,13 +84,19 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             Task {
                 do {
                     try await withRateLimit { [self] in
-                        let messages = [ChatMessage].from(transcript: transcript)
-                        let tools = extractTools(from: transcript)
-                        let request = try requestBuilder.buildStreamRequest(
+                        // Use TranscriptConverter for all conversions
+                        let messages = TranscriptConverter.buildMessages(from: transcript)
+                        let tools = TranscriptConverter.extractTools(from: transcript)
+                        let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+                        let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
+                        
+                        let request = try buildChatRequestWithFormat(
                             model: model,
                             messages: messages,
-                            options: options,
-                            tools: tools
+                            options: finalOptions,
+                            tools: tools,
+                            responseFormat: responseFormat,
+                            stream: true
                         )
                         
                         let streamHandler = StreamingHandler()
@@ -157,16 +170,81 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         return true
     }
     
-    // MARK: - Transcript Helpers
+    // MARK: - Structured Output with GenerationSchema
     
-    /// Extract tools from transcript instructions
-    private func extractTools(from transcript: Transcript) -> [Transcript.ToolDefinition]? {
-        for entry in transcript {
-            if case .instructions(let instructions) = entry {
-                return instructions.toolDefinitions
+    /// Generate with explicit JSON Schema for structured output
+    /// - Parameters:
+    ///   - transcript: The conversation transcript
+    ///   - schema: The GenerationSchema to use for structured output
+    ///   - options: Generation options
+    /// - Returns: The generated transcript entry
+    public func generate(
+        transcript: Transcript,
+        schema: GenerationSchema,
+        options: GenerationOptions? = nil
+    ) async throws -> Transcript.Entry {
+        try await withRateLimit { [self] in
+            // Use TranscriptConverter for message building
+            let messages = TranscriptConverter.buildMessages(from: transcript)
+            let tools = TranscriptConverter.extractTools(from: transcript)
+            
+            // Convert GenerationSchema to ResponseFormat
+            let responseFormat = convertSchemaToResponseFormat(schema)
+            let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
+            
+            // Build request with JSON Schema format
+            let request = try buildChatRequestWithFormat(
+                model: model,
+                messages: messages,
+                options: finalOptions,
+                tools: tools,
+                responseFormat: responseFormat,
+                stream: false
+            )
+            
+            // Send request
+            let response: ChatCompletionResponse = try await httpClient.send(request)
+            
+            // Handle tool calls if present
+            if let toolCalls = responseHandler.extractToolCalls(from: response),
+               !toolCalls.isEmpty {
+                return .toolCalls(convertToTranscriptToolCalls(toolCalls))
             }
+            
+            // Return normal response
+            let content = try responseHandler.extractContent(from: response)
+            return createResponseEntry(content: content)
         }
-        return nil
+    }
+    
+    /// Generate with a Generable type for structured output
+    /// - Parameters:
+    ///   - transcript: The conversation transcript
+    ///   - type: The Generable type to use for structured output
+    ///   - options: Generation options
+    /// - Returns: The generated transcript entry with structured content
+    public func generate<T: Generable>(
+        transcript: Transcript,
+        generating type: T.Type,
+        options: GenerationOptions? = nil
+    ) async throws -> (entry: Transcript.Entry, content: T) {
+        // Get the schema from the Generable type
+        let schema = T.generationSchema
+        
+        // Generate with the schema
+        let entry = try await generate(transcript: transcript, schema: schema, options: options)
+        
+        // Parse the response content
+        guard case .response(let response) = entry else {
+            throw OpenAILanguageModelError.unexpectedResponse("Expected response entry, got \(entry)")
+        }
+        
+        // Extract the content and parse it
+        let content = extractTextFromSegments(response.segments)
+        let generatedContent = try GeneratedContent(json: content)
+        let parsedContent = try T(generatedContent)
+        
+        return (entry, parsedContent)
     }
     
     /// Get model information
@@ -205,6 +283,152 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     private func withRateLimit<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
         try await rateLimiter.execute(operation)
+    }
+    
+    // MARK: - Private Helper Methods
+    
+    /// Build chat request with optional response format
+    private func buildChatRequestWithFormat(
+        model: OpenAIModel,
+        messages: [ChatMessage],
+        options: GenerationOptions?,
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?,
+        stream: Bool
+    ) throws -> OpenAIHTTPRequest {
+        // Create the appropriate request based on request builder type
+        if stream {
+            // For streaming, we need to build a stream request
+            // but also include response format in the underlying ChatCompletionRequest
+            return try requestBuilder.buildStreamRequest(
+                model: model,
+                messages: messages,
+                options: options,
+                tools: tools?.map { tool in
+                    Transcript.ToolDefinition(
+                        name: tool.function.name,
+                        description: tool.function.description ?? "",
+                        parameters: GenerationSchema(type: String.self, description: "", properties: [])
+                    )
+                }
+            )
+        } else {
+            return try requestBuilder.buildChatRequest(
+                model: model,
+                messages: messages,
+                options: options,
+                tools: tools?.map { tool in
+                    Transcript.ToolDefinition(
+                        name: tool.function.name,
+                        description: tool.function.description ?? "",
+                        parameters: GenerationSchema(type: String.self, description: "", properties: [])
+                    )
+                }
+            )
+        }
+    }
+    
+    /// Convert GenerationSchema to ResponseFormat
+    private func convertSchemaToResponseFormat(_ schema: GenerationSchema) -> ResponseFormat {
+        // Encode GenerationSchema to get JSON Schema
+        do {
+            let encoder = JSONEncoder()
+            let schemaData = try encoder.encode(schema)
+            
+            // Convert to JSON dictionary
+            if let schemaJson = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] {
+                // Transform to OpenAI's expected JSON Schema format
+                let transformedSchema = transformToOpenAIJSONSchema(schemaJson)
+                return .jsonSchema(transformedSchema)
+            }
+        } catch {
+            print("Warning: Failed to convert GenerationSchema to ResponseFormat: \(error)")
+        }
+        
+        // Fallback to JSON mode
+        return .json
+    }
+    
+    /// Transform GenerationSchema JSON to OpenAI's JSON Schema format
+    private func transformToOpenAIJSONSchema(_ json: [String: Any]) -> [String: Any] {
+        var schema: [String: Any] = [:]
+        
+        // Extract type (default to "object")
+        schema["type"] = json["type"] as? String ?? "object"
+        
+        // Extract and transform properties
+        if let properties = json["properties"] as? [String: [String: Any]] {
+            var transformedProperties: [String: [String: Any]] = [:]
+            
+            for (key, propJson) in properties {
+                var prop: [String: Any] = [:]
+                prop["type"] = propJson["type"] as? String ?? "string"
+                
+                if let description = propJson["description"] as? String {
+                    prop["description"] = description
+                }
+                
+                // Handle enum values if present
+                if let enumValues = propJson["enum"] as? [String] {
+                    prop["enum"] = enumValues
+                }
+                
+                // Handle array items if present
+                if prop["type"] as? String == "array",
+                   let items = propJson["items"] as? [String: Any] {
+                    prop["items"] = items
+                }
+                
+                transformedProperties[key] = prop
+            }
+            
+            schema["properties"] = transformedProperties
+        }
+        
+        // Extract required fields
+        if let required = json["required"] as? [String] {
+            schema["required"] = required
+        }
+        
+        // Add description if present
+        if let description = json["description"] as? String {
+            schema["description"] = description
+        }
+        
+        return schema
+    }
+    
+    /// Create response entry from content string
+    private func createResponseEntry(content: String) -> Transcript.Entry {
+        return .response(
+            Transcript.Response(
+                assetIDs: [],
+                segments: [.text(Transcript.TextSegment(content: content))]
+            )
+        )
+    }
+    
+    /// Extract text from Transcript segments
+    private func extractTextFromSegments(_ segments: [Transcript.Segment]) -> String {
+        var texts: [String] = []
+        
+        for segment in segments {
+            switch segment {
+            case .text(let textSegment):
+                texts.append(textSegment.content)
+                
+            case .structure(let structuredSegment):
+                // Convert structured content to string
+                if let jsonData = try? JSONEncoder().encode(structuredSegment.content),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    texts.append(jsonString)
+                } else {
+                    texts.append("[GeneratedContent]")
+                }
+            }
+        }
+        
+        return texts.joined(separator: " ")
     }
 }
 
@@ -406,6 +630,18 @@ extension OpenAILanguageModel {
             return GeneratedContent(kind: .null)
         default:
             return GeneratedContent(kind: .null)
+        }
+    }
+}
+
+// MARK: - OpenAILanguageModelError
+public enum OpenAILanguageModelError: Error, LocalizedError {
+    case unexpectedResponse(String)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .unexpectedResponse(let message):
+            return "Unexpected response: \(message)"
         }
     }
 }
