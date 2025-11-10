@@ -79,8 +79,8 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         }
     }
     
-    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<Transcript.Entry> {
-        AsyncStream<Transcript.Entry> { continuation in
+    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncThrowingStream<Transcript.Entry, Error> {
+        AsyncThrowingStream<Transcript.Entry, Error> { continuation in
             Task {
                 do {
                     try await withRateLimit { [self] in
@@ -89,7 +89,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         let tools = TranscriptConverter.extractTools(from: transcript)
                         let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
                         let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
-                        
+
                         let request = try buildChatRequestWithFormat(
                             model: model,
                             messages: messages,
@@ -98,11 +98,11 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                             responseFormat: responseFormat,
                             stream: true
                         )
-                        
+
                         let streamHandler = StreamingHandler()
                         var accumulatedContent = ""
                         var accumulatedToolCalls: [OpenAIToolCall] = []
-                        
+
                         for try await data in await httpClient.stream(request) {
                             do {
                                 if let chunks = try streamHandler.processStreamData(data) {
@@ -140,7 +140,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                                                 )
                                                 continuation.yield(.response(responseEntry))
                                             }
-                                            
+
                                             // Check for finish reason
                                             if choice.finishReason == "tool_calls" && !accumulatedToolCalls.isEmpty {
                                                 // Yield the accumulated tool calls
@@ -151,15 +151,15 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                                     }
                                 }
                             } catch {
-                                continuation.finish()
+                                continuation.finish(throwing: error)
                                 return
                             }
                         }
-                        
+
                         continuation.finish()
                     }
                 } catch {
-                    continuation.finish()
+                    continuation.finish(throwing: error)
                 }
             }
         }
