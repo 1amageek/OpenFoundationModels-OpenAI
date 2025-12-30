@@ -591,26 +591,51 @@ public struct ChatCompletionStreamResponse: Codable, Sendable {
     public let created: Int
     public let model: String
     public let choices: [StreamChoice]
-    
+
     public struct StreamChoice: Codable, Sendable {
         public let index: Int
         public let delta: Delta
         public let finishReason: String?
-        
+
         public struct Delta: Codable, Sendable {
             public let role: String?
             public let content: String?
-            public let toolCalls: [OpenAIToolCall]?
-            
+            public let toolCalls: [StreamingToolCall]?
+
             enum CodingKeys: String, CodingKey {
                 case role, content
                 case toolCalls = "tool_calls"
             }
         }
-        
+
         enum CodingKeys: String, CodingKey {
             case index, delta
             case finishReason = "finish_reason"
+        }
+    }
+}
+
+/// Tool call type for streaming responses where id and type are only in the first chunk
+public struct StreamingToolCall: Codable, Sendable {
+    public let index: Int
+    public let id: String?
+    public let type: String?
+    public let function: StreamingFunctionCall
+
+    public init(index: Int, id: String? = nil, type: String? = nil, function: StreamingFunctionCall) {
+        self.index = index
+        self.id = id
+        self.type = type
+        self.function = function
+    }
+
+    public struct StreamingFunctionCall: Codable, Sendable {
+        public let name: String?
+        public let arguments: String?
+
+        public init(name: String? = nil, arguments: String? = nil) {
+            self.name = name
+            self.arguments = arguments
         }
     }
 }

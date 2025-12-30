@@ -101,7 +101,8 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
 
                         let streamHandler = StreamingHandler()
                         var accumulatedContent = ""
-                        var accumulatedToolCalls: [OpenAIToolCall] = []
+                        // Use dictionary keyed by index for streaming tool calls
+                        var accumulatedToolCalls: [Int: (id: String, type: String, name: String, arguments: String)] = [:]
 
                         for try await data in await httpClient.stream(request) {
                             do {
@@ -112,23 +113,24 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                                             // Handle tool calls in stream
                                             let delta = choice.delta
                                             if let toolCalls = delta.toolCalls {
-                                                // Accumulate tool calls
+                                                // Accumulate tool calls by index
                                                 for toolCall in toolCalls {
-                                                    if let existingIndex = accumulatedToolCalls.firstIndex(where: { $0.id == toolCall.id }) {
+                                                    let index = toolCall.index
+                                                    if var existing = accumulatedToolCalls[index] {
                                                         // Update existing tool call by appending arguments
-                                                        let existing = accumulatedToolCalls[existingIndex]
-                                                        let updatedToolCall = OpenAIToolCall(
-                                                            id: existing.id,
-                                                            type: existing.type,
-                                                            function: OpenAIToolCall.FunctionCall(
-                                                                name: existing.function.name,
-                                                                arguments: existing.function.arguments + toolCall.function.arguments
-                                                            )
-                                                        )
-                                                        accumulatedToolCalls[existingIndex] = updatedToolCall
+                                                        if let name = toolCall.function.name, !name.isEmpty {
+                                                            existing.name = name
+                                                        }
+                                                        existing.arguments += toolCall.function.arguments ?? ""
+                                                        accumulatedToolCalls[index] = existing
                                                     } else {
-                                                        // Add new tool call
-                                                        accumulatedToolCalls.append(toolCall)
+                                                        // Add new tool call (first chunk has id and type)
+                                                        accumulatedToolCalls[index] = (
+                                                            id: toolCall.id ?? "call_\(index)",
+                                                            type: toolCall.type ?? "function",
+                                                            name: toolCall.function.name ?? "",
+                                                            arguments: toolCall.function.arguments ?? ""
+                                                        )
                                                     }
                                                 }
                                             } else if let content = delta.content {
@@ -143,8 +145,19 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
 
                                             // Check for finish reason
                                             if choice.finishReason == "tool_calls" && !accumulatedToolCalls.isEmpty {
+                                                // Convert accumulated tool calls to OpenAIToolCall array
+                                                let toolCallsArray = accumulatedToolCalls.sorted { $0.key < $1.key }.map { (_, value) in
+                                                    OpenAIToolCall(
+                                                        id: value.id,
+                                                        type: value.type,
+                                                        function: OpenAIToolCall.FunctionCall(
+                                                            name: value.name,
+                                                            arguments: value.arguments
+                                                        )
+                                                    )
+                                                }
                                                 // Yield the accumulated tool calls
-                                                let transcriptToolCalls = convertToTranscriptToolCalls(accumulatedToolCalls)
+                                                let transcriptToolCalls = convertToTranscriptToolCalls(toolCallsArray)
                                                 continuation.yield(.toolCalls(transcriptToolCalls))
                                             }
                                         }
@@ -271,9 +284,10 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                 model: model,
                 messages: [ChatMessage.user("test")],
                 options: GenerationOptions(maximumResponseTokens: 1),
-                tools: nil
+                tools: nil,
+                responseFormat: nil
             )
-            
+
             let _: ChatCompletionResponse = try await httpClient.send(request)
             return true
         } catch {
@@ -286,7 +300,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     // MARK: - Private Helper Methods
-    
+
     /// Build chat request with optional response format
     private func buildChatRequestWithFormat(
         model: OpenAIModel,
@@ -298,32 +312,20 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     ) throws -> OpenAIHTTPRequest {
         // Create the appropriate request based on request builder type
         if stream {
-            // For streaming, we need to build a stream request
-            // but also include response format in the underlying ChatCompletionRequest
             return try requestBuilder.buildStreamRequest(
                 model: model,
                 messages: messages,
                 options: options,
-                tools: tools?.map { tool in
-                    Transcript.ToolDefinition(
-                        name: tool.function.name,
-                        description: tool.function.description ?? "",
-                        parameters: GenerationSchema(type: String.self, description: "", properties: [])
-                    )
-                }
+                tools: tools,
+                responseFormat: responseFormat
             )
         } else {
             return try requestBuilder.buildChatRequest(
                 model: model,
                 messages: messages,
                 options: options,
-                tools: tools?.map { tool in
-                    Transcript.ToolDefinition(
-                        name: tool.function.name,
-                        description: tool.function.description ?? "",
-                        parameters: GenerationSchema(type: String.self, description: "", properties: [])
-                    )
-                }
+                tools: tools,
+                responseFormat: responseFormat
             )
         }
     }

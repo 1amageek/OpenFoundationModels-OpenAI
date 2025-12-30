@@ -28,9 +28,10 @@ struct RequestBuilderTests {
             model: .gpt4o,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         #expect(request.endpoint == "chat/completions", "Should use correct endpoint")
         #expect(request.method == HTTPMethod.POST, "Should use POST method")
         #expect(request.body != nil, "Should have request body")
@@ -54,9 +55,10 @@ struct RequestBuilderTests {
             model: .gpt4o,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         #expect(request.endpoint == "chat/completions", "Should use correct endpoint")
         #expect(request.method == HTTPMethod.POST, "Should use POST method")
         
@@ -80,14 +82,15 @@ struct RequestBuilderTests {
             model: model,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.model == model.apiName, "Should use correct model API name")
-        
+
         // GPT models should support temperature
         #expect(chatRequest.temperature != nil, "GPT models should support temperature")
     }
@@ -95,47 +98,50 @@ struct RequestBuilderTests {
     @Test("GPT request builder handles nil options")
     func testGPTBuilderWithNilOptions() throws {
         let builder = GPTRequestBuilder()
-        
+
         let request = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: nil,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.temperature == nil, "Should handle nil temperature")
         #expect(chatRequest.maxTokens == nil, "Should handle nil maxTokens")
     }
-    
+
     @Test("GPT request builder handles tools")
     func testGPTBuilderWithTools() throws {
         let builder = GPTRequestBuilder()
-        
-        // Create test tool definitions with proper property array
-        let properties: [GenerationSchema.Property] = []
-        let toolDef = Transcript.ToolDefinition(
-            name: "get_weather",
-            description: "Get the current weather",
-            parameters: GenerationSchema(
-                type: GeneratedContent.self,
-                description: "Weather parameters",
-                properties: properties
+
+        // Create test tool with proper JSONSchema
+        let tool = Tool(
+            function: Tool.Function(
+                name: "get_weather",
+                description: "Get the current weather",
+                parameters: JSONSchema(
+                    type: "object",
+                    properties: [:],
+                    required: nil
+                )
             )
         )
-        
+
         let request = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: [toolDef]
+            tools: [tool],
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.tools != nil, "Should include tools when provided")
         #expect(chatRequest.tools?.count == 1, "Should include correct number of tools")
         #expect(chatRequest.tools?.first?.function.name == "get_weather", "Should preserve tool name")
@@ -146,46 +152,48 @@ struct RequestBuilderTests {
     @Test("Reasoning request builder creates valid chat request")
     func testReasoningChatRequest() throws {
         let builder = ReasoningRequestBuilder()
-        
+
         let request = try builder.buildChatRequest(
             model: .o1,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         #expect(request.endpoint == "chat/completions", "Should use correct endpoint")
         #expect(request.method == HTTPMethod.POST, "Should use POST method")
-        
+
         // Decode and verify the request body
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.model == "o1", "Should use correct model name")
         #expect(chatRequest.messages.count == 2, "Should include all messages")
-        
+
         // Reasoning models don't support temperature
         #expect(chatRequest.temperature == nil, "Reasoning models don't support temperature")
     }
-    
+
     @Test("Reasoning request builder creates valid stream request")
     func testReasoningStreamRequest() throws {
         let builder = ReasoningRequestBuilder()
-        
+
         let request = try builder.buildStreamRequest(
             model: .o3,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.stream == true, "Stream request should enable streaming")
         #expect(chatRequest.model == "o3", "Should use correct model name")
     }
-    
+
     @Test("Reasoning request builder works with different reasoning models", arguments: [
         OpenAIModel.o1,
         OpenAIModel.o1Pro,
@@ -195,19 +203,20 @@ struct RequestBuilderTests {
     ])
     func testReasoningBuilderWithDifferentModels(model: OpenAIModel) throws {
         let builder = ReasoningRequestBuilder()
-        
+
         let request = try builder.buildChatRequest(
             model: model,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.model == model.apiName, "Should use correct model API name")
-        
+
         // Reasoning models should not support temperature
         #expect(chatRequest.temperature == nil, "Reasoning models should not support temperature")
     }
@@ -310,134 +319,281 @@ struct RequestBuilderTests {
     @Test("HTTP request has correct structure")
     func testHTTPRequestStructure() throws {
         let builder = GPTRequestBuilder()
-        
+
         let request = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         #expect(request.endpoint == "chat/completions", "Should have correct endpoint")
         #expect(request.method == HTTPMethod.POST, "Should use POST method")
         #expect(request.headers.isEmpty, "Should have empty headers by default")
         #expect(request.body != nil, "Should have request body")
-        
+
         // Verify the body is valid JSON
         let json = try JSONSerialization.jsonObject(with: request.body!, options: [])
         #expect(json is [String: Any], "Request body should be valid JSON object")
     }
-    
+
     @Test("Request body encoding is consistent")
     func testRequestBodyEncoding() throws {
         let builder = GPTRequestBuilder()
-        
+
         // Build same request twice
         let request1 = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let request2 = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: Self.testOptions,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         // Decode both and compare
         let decoder = JSONDecoder()
         let chatRequest1 = try decoder.decode(ChatCompletionRequest.self, from: request1.body!)
         let chatRequest2 = try decoder.decode(ChatCompletionRequest.self, from: request2.body!)
-        
+
         #expect(chatRequest1.model == chatRequest2.model, "Models should match")
         #expect(chatRequest1.temperature == chatRequest2.temperature, "Temperature should match")
     }
     
     // MARK: - Parameter Validation Tests
-    
+
     @Test("GPT builder preserves supported parameters")
     func testGPTParameterPreservation() throws {
         let options = GenerationOptions(
             temperature: 0.8,
             maximumResponseTokens: 150
         )
-        
+
         let builder = GPTRequestBuilder()
         let request = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: options,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.temperature == 0.8, "Should preserve temperature")
         // Note: maximumResponseTokens may be mapped differently
     }
-    
+
     @Test("Reasoning builder filters unsupported parameters")
     func testReasoningParameterFiltering() throws {
         let options = GenerationOptions(
             temperature: 0.5, // Should be filtered out for reasoning models
             maximumResponseTokens: 200
         )
-        
+
         let builder = ReasoningRequestBuilder()
         let request = try builder.buildChatRequest(
             model: .o1,
             messages: Self.testMessages,
             options: options,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.temperature == nil, "Should filter out temperature for reasoning models")
     }
-    
+
     // MARK: - Edge Case Tests
-    
+
     @Test("Builder handles empty message list")
     func testEmptyMessageList() throws {
         let builder = GPTRequestBuilder()
-        
+
         let request = try builder.buildChatRequest(
             model: .gpt4o,
             messages: [],
             options: nil,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.messages.isEmpty, "Should handle empty message list")
     }
-    
+
     @Test("Builder handles extreme parameter values")
     func testExtremeParameterValues() throws {
         let options = GenerationOptions(
             temperature: 0.0, // Minimum
             maximumResponseTokens: 1 // Minimum
         )
-        
+
         let builder = GPTRequestBuilder()
         let request = try builder.buildChatRequest(
             model: .gpt4o,
             messages: Self.testMessages,
             options: options,
-            tools: nil
+            tools: nil,
+            responseFormat: nil
         )
-        
+
         let decoder = JSONDecoder()
         let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
-        
+
         #expect(chatRequest.temperature == 0.0, "Should handle minimum temperature")
+    }
+
+    // MARK: - ResponseFormat Tests
+
+    @Test("GPT builder includes JSON response format")
+    func testGPTBuilderWithJSONResponseFormat() throws {
+        let builder = GPTRequestBuilder()
+
+        let request = try builder.buildChatRequest(
+            model: .gpt4o,
+            messages: Self.testMessages,
+            options: Self.testOptions,
+            tools: nil,
+            responseFormat: .json
+        )
+
+        // Verify by checking the JSON structure
+        let json = try JSONSerialization.jsonObject(with: request.body!) as? [String: Any]
+        let responseFormat = json?["response_format"] as? [String: Any]
+
+        #expect(responseFormat != nil, "Should include response format")
+        #expect(responseFormat?["type"] as? String == "json_object", "Should be json_object type")
+    }
+
+    @Test("GPT builder includes JSON Schema response format")
+    func testGPTBuilderWithJSONSchemaResponseFormat() throws {
+        let builder = GPTRequestBuilder()
+
+        let schemaDict: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "name": ["type": "string", "description": "The name"],
+                "age": ["type": "integer", "description": "The age"]
+            ],
+            "required": ["name", "age"]
+        ]
+        let responseFormat = ResponseFormat.jsonSchema(schemaDict)
+
+        let request = try builder.buildChatRequest(
+            model: .gpt4o,
+            messages: Self.testMessages,
+            options: Self.testOptions,
+            tools: nil,
+            responseFormat: responseFormat
+        )
+
+        // Verify by checking the JSON structure
+        let json = try JSONSerialization.jsonObject(with: request.body!) as? [String: Any]
+        let format = json?["response_format"] as? [String: Any]
+
+        #expect(format != nil, "Should include response format")
+        #expect(format?["type"] as? String == "json_schema", "Should be json_schema type")
+        #expect(format?["json_schema"] != nil, "Should include JSON schema")
+    }
+
+    @Test("GPT builder handles nil response format")
+    func testGPTBuilderWithNilResponseFormat() throws {
+        let builder = GPTRequestBuilder()
+
+        let request = try builder.buildChatRequest(
+            model: .gpt4o,
+            messages: Self.testMessages,
+            options: Self.testOptions,
+            tools: nil,
+            responseFormat: nil
+        )
+
+        let decoder = JSONDecoder()
+        let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
+
+        #expect(chatRequest.responseFormat == nil, "Should not include response format when nil")
+    }
+
+    @Test("Reasoning builder includes response format")
+    func testReasoningBuilderWithResponseFormat() throws {
+        let builder = ReasoningRequestBuilder()
+
+        let request = try builder.buildChatRequest(
+            model: .o1,
+            messages: Self.testMessages,
+            options: Self.testOptions,
+            tools: nil,
+            responseFormat: .json
+        )
+
+        // Verify by checking the JSON structure
+        let json = try JSONSerialization.jsonObject(with: request.body!) as? [String: Any]
+        let responseFormat = json?["response_format"] as? [String: Any]
+
+        #expect(responseFormat != nil, "Reasoning builder should include response format")
+        #expect(responseFormat?["type"] as? String == "json_object", "Should be json_object type")
+    }
+
+    @Test("Stream request includes response format")
+    func testStreamRequestWithResponseFormat() throws {
+        let builder = GPTRequestBuilder()
+
+        let request = try builder.buildStreamRequest(
+            model: .gpt4o,
+            messages: Self.testMessages,
+            options: Self.testOptions,
+            tools: nil,
+            responseFormat: .json
+        )
+
+        // Verify by checking the JSON structure
+        let json = try JSONSerialization.jsonObject(with: request.body!) as? [String: Any]
+        let responseFormat = json?["response_format"] as? [String: Any]
+
+        #expect(json?["stream"] as? Bool == true, "Should be a stream request")
+        #expect(responseFormat != nil, "Stream request should include response format")
+        #expect(responseFormat?["type"] as? String == "json_object", "Should be json_object type")
+    }
+
+    @Test("Request includes both tools and response format")
+    func testRequestWithToolsAndResponseFormat() throws {
+        let builder = GPTRequestBuilder()
+
+        let tool = Tool(
+            function: Tool.Function(
+                name: "get_data",
+                description: "Get some data",
+                parameters: JSONSchema(type: "object", properties: [:], required: nil)
+            )
+        )
+
+        let request = try builder.buildChatRequest(
+            model: .gpt4o,
+            messages: Self.testMessages,
+            options: Self.testOptions,
+            tools: [tool],
+            responseFormat: .json
+        )
+
+        let decoder = JSONDecoder()
+        let chatRequest = try decoder.decode(ChatCompletionRequest.self, from: request.body!)
+
+        #expect(chatRequest.tools != nil, "Should include tools")
+        #expect(chatRequest.tools?.count == 1, "Should have one tool")
+        #expect(chatRequest.responseFormat != nil, "Should include response format")
     }
 }
