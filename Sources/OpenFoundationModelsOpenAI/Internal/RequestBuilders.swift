@@ -259,94 +259,91 @@ internal protocol RequestBuilder: Sendable {
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?
     ) throws -> OpenAIHTTPRequest
-    
+
     func buildStreamRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?
     ) throws -> OpenAIHTTPRequest
 }
 
 // MARK: - GPT Request Builder
 internal struct GPTRequestBuilder: RequestBuilder {
-    
+
     func buildChatRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?
     ) throws -> OpenAIHTTPRequest {
         let request = try createChatCompletionRequest(
             model: model,
             messages: messages,
             options: options,
             tools: tools,
-            stream: false
+            stream: false,
+            responseFormat: responseFormat
         )
-        
+
         return try buildHTTPRequest(from: request)
     }
-    
+
     func buildStreamRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?
     ) throws -> OpenAIHTTPRequest {
         let request = try createChatCompletionRequest(
             model: model,
             messages: messages,
             options: options,
             tools: tools,
-            stream: true
+            stream: true,
+            responseFormat: responseFormat
         )
-        
+
         return try buildHTTPRequest(from: request)
     }
-    
+
     private func createChatCompletionRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?,
+        tools: [Tool]?,
         stream: Bool,
-        responseFormat: ResponseFormat? = nil
+        responseFormat: ResponseFormat?
     ) throws -> ChatCompletionRequest {
         _ = model.constraints  // For future constraint validation
         let validatedOptions = validateOptions(options, for: model)
-        
-        // Convert ToolDefinitions to OpenAI Tool format
-        let openAITools = tools?.map { toolDef in
-            Tool(function: Tool.Function(
-                name: toolDef.name,
-                description: toolDef.description,
-                parameters: convertToJSONSchema(toolDef.parameters)
-            ))
-        }
-        
+
         return ChatCompletionRequest(
             model: model.apiName,
             messages: messages,
             temperature: validatedOptions?.temperature,
             maxTokens: validatedOptions?.maximumResponseTokens,
             stream: stream ? true : nil,
-            tools: openAITools,
+            tools: tools,
             responseFormat: responseFormat
         )
     }
-    
+
     private func validateOptions(_ options: GenerationOptions?, for model: OpenAIModel) -> GenerationOptions? {
         // OpenFoundationModels GenerationOptions are immutable, return as-is
         return options
     }
-    
+
     private func buildHTTPRequest(from chatRequest: ChatCompletionRequest) throws -> OpenAIHTTPRequest {
         let encoder = JSONEncoder()
         let body = try encoder.encode(chatRequest)
-        
+
         return OpenAIHTTPRequest(
             endpoint: "chat/completions",
             method: .POST,
@@ -358,78 +355,75 @@ internal struct GPTRequestBuilder: RequestBuilder {
 
 // MARK: - Reasoning Request Builder
 internal struct ReasoningRequestBuilder: RequestBuilder {
-    
+
     func buildChatRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?
     ) throws -> OpenAIHTTPRequest {
         let request = try createChatCompletionRequest(
             model: model,
             messages: messages,
             options: options,
             tools: tools,
-            stream: false
+            stream: false,
+            responseFormat: responseFormat
         )
-        
+
         return try buildHTTPRequest(from: request)
     }
-    
+
     func buildStreamRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?
+        tools: [Tool]?,
+        responseFormat: ResponseFormat?
     ) throws -> OpenAIHTTPRequest {
         let request = try createChatCompletionRequest(
             model: model,
             messages: messages,
             options: options,
             tools: tools,
-            stream: true
+            stream: true,
+            responseFormat: responseFormat
         )
-        
+
         return try buildHTTPRequest(from: request)
     }
-    
+
     private func createChatCompletionRequest(
         model: OpenAIModel,
         messages: [ChatMessage],
         options: GenerationOptions?,
-        tools: [Transcript.ToolDefinition]?,
+        tools: [Tool]?,
         stream: Bool,
-        responseFormat: ResponseFormat? = nil
+        responseFormat: ResponseFormat?
     ) throws -> ChatCompletionRequest {
         // Reasoning models use max_completion_tokens instead of max_tokens
         // Note: Reasoning models typically don't support tools/function calling
-        let openAITools = tools?.map { toolDef in
-            Tool(function: Tool.Function(
-                name: toolDef.name,
-                description: toolDef.description,
-                parameters: convertToJSONSchema(toolDef.parameters)
-            ))
-        }
-        
+
         return ChatCompletionRequest(
             model: model.apiName,
             messages: messages,
             maxCompletionTokens: options?.maximumResponseTokens,
             stream: stream ? true : nil,
-            tools: openAITools,
+            tools: tools,
             responseFormat: responseFormat
         )
     }
-    
+
     private func validateOptions(_ options: GenerationOptions?, for model: OpenAIModel) -> GenerationOptions? {
         // Reasoning models only use maxTokens, return as-is
         return options
     }
-    
+
     private func buildHTTPRequest(from chatRequest: ChatCompletionRequest) throws -> OpenAIHTTPRequest {
         let encoder = JSONEncoder()
         let body = try encoder.encode(chatRequest)
-        
+
         return OpenAIHTTPRequest(
             endpoint: "chat/completions",
             method: .POST,

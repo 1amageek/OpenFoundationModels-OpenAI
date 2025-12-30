@@ -446,7 +446,7 @@ struct StreamingTests {
     @Test("StreamCollector handles chunks without content")
     func testStreamCollectorNoContent() async throws {
         let collector = StreamCollector()
-        
+
         let chunk = ChatCompletionStreamResponse(
             id: "test",
             object: "chat.completion.chunk",
@@ -464,13 +464,185 @@ struct StreamingTests {
                 )
             ]
         )
-        
+
         await collector.addChunk(chunk)
-        
+
         let collectedContent = await collector.getCollectedContent()
         #expect(collectedContent == "", "Should handle chunks without content")
-        
+
         let allChunks = await collector.getAllChunks()
         #expect(allChunks.count == 1, "Should still store chunk without content")
+    }
+
+    // MARK: - Streaming Tool Calls Tests
+
+    @Test("StreamingHandler processes tool call chunks")
+    func testStreamingToolCallChunks() throws {
+        let handler = StreamingHandler()
+
+        // Create a tool call chunk
+        let toolCallChunk = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_abc123","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}]}
+            """
+
+        let result = try handler.processStreamData(toolCallChunk.data(using: .utf8)!)
+
+        #expect(result != nil, "Should process tool call chunk")
+        #expect(result?.first?.choices.first?.delta.toolCalls != nil, "Should have tool calls")
+        #expect(result?.first?.choices.first?.delta.toolCalls?.first?.function.name == "get_weather", "Should have correct function name")
+    }
+
+    @Test("StreamingHandler accumulates tool call arguments")
+    func testStreamingToolCallArgumentAccumulation() throws {
+        let handler = StreamingHandler()
+
+        // First chunk with function name
+        let chunk1 = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_abc123","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}]}
+            """
+
+        // Second chunk with partial arguments
+        let chunk2 = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"loc"}}]},"finish_reason":null}]}
+            """
+
+        // Third chunk with more arguments
+        let chunk3 = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ation\\":\\"Tokyo\\"}"}}]},"finish_reason":null}]}
+            """
+
+        let result1 = try handler.processStreamData(chunk1.data(using: .utf8)!)
+        let result2 = try handler.processStreamData(chunk2.data(using: .utf8)!)
+        let result3 = try handler.processStreamData(chunk3.data(using: .utf8)!)
+
+        #expect(result1 != nil)
+        #expect(result2 != nil)
+        #expect(result3 != nil)
+
+        // Verify each chunk has the expected structure
+        #expect(result1?.first?.choices.first?.delta.toolCalls?.first?.id == "call_abc123")
+        #expect(result2?.first?.choices.first?.delta.toolCalls?.first?.function.arguments == "{\"loc")
+        #expect(result3?.first?.choices.first?.delta.toolCalls?.first?.function.arguments == "ation\":\"Tokyo\"}")
+    }
+
+    @Test("StreamingHandler handles multiple parallel tool calls")
+    func testStreamingMultipleToolCalls() throws {
+        let handler = StreamingHandler()
+
+        // Chunk with multiple tool calls
+        let chunk = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":""}},{"index":1,"id":"call_2","type":"function","function":{"name":"get_time","arguments":""}}]},"finish_reason":null}]}
+            """
+
+        let result = try handler.processStreamData(chunk.data(using: .utf8)!)
+
+        #expect(result != nil)
+        #expect(result?.first?.choices.first?.delta.toolCalls?.count == 2, "Should have two tool calls")
+        #expect(result?.first?.choices.first?.delta.toolCalls?[0].function.name == "get_weather")
+        #expect(result?.first?.choices.first?.delta.toolCalls?[1].function.name == "get_time")
+    }
+
+    @Test("StreamingHandler handles tool call finish reason")
+    func testStreamingToolCallFinishReason() throws {
+        let handler = StreamingHandler()
+
+        let chunk = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+            """
+
+        let result = try handler.processStreamData(chunk.data(using: .utf8)!)
+
+        #expect(result != nil)
+        #expect(result?.first?.choices.first?.finishReason == "tool_calls", "Should have tool_calls finish reason")
+    }
+
+    @Test("AdvancedStreamingHandler accumulates tool calls across chunks")
+    func testAdvancedStreamingToolCallAccumulation() async throws {
+        let handler = AdvancedStreamingHandler()
+
+        // First chunk with tool call start
+        let chunk1 = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_xyz","type":"function","function":{"name":"search","arguments":""}}]},"finish_reason":null}]}
+
+            """
+
+        // Second chunk with arguments
+        let chunk2 = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"query\\":\\"test\\"}"}}]},"finish_reason":null}]}
+
+            """
+
+        // Final chunk
+        let chunk3 = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+            """
+
+        let result1 = try await handler.processStreamChunk(chunk1.data(using: .utf8)!)
+        let result2 = try await handler.processStreamChunk(chunk2.data(using: .utf8)!)
+        let result3 = try await handler.processStreamChunk(chunk3.data(using: .utf8)!)
+
+        #expect(!result1.chunks.isEmpty || !result2.chunks.isEmpty || !result3.chunks.isEmpty, "Should process chunks")
+        #expect(result3.isComplete, "Should be complete after tool_calls finish reason")
+    }
+
+    @Test("StreamCollector tracks tool call chunks")
+    func testStreamCollectorToolCalls() async throws {
+        let collector = StreamCollector()
+
+        let toolCallChunk = ChatCompletionStreamResponse(
+            id: "test",
+            object: "chat.completion.chunk",
+            created: 1234567890,
+            model: "gpt-4o",
+            choices: [
+                ChatCompletionStreamResponse.StreamChoice(
+                    index: 0,
+                    delta: ChatCompletionStreamResponse.StreamChoice.Delta(
+                        role: "assistant",
+                        content: nil,
+                        toolCalls: [
+                            StreamingToolCall(
+                                index: 0,
+                                id: "call_test",
+                                type: "function",
+                                function: StreamingToolCall.StreamingFunctionCall(
+                                    name: "test_function",
+                                    arguments: "{}"
+                                )
+                            )
+                        ]
+                    ),
+                    finishReason: nil
+                )
+            ]
+        )
+
+        await collector.addChunk(toolCallChunk)
+
+        let allChunks = await collector.getAllChunks()
+        #expect(allChunks.count == 1)
+        #expect(allChunks.first?.choices.first?.delta.toolCalls?.first?.function.name == "test_function")
+    }
+
+    @Test("Streaming mixed content and tool calls")
+    func testStreamingMixedContentAndToolCalls() throws {
+        let handler = StreamingHandler()
+
+        // Content chunk first
+        let contentChunk = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","content":"Let me check the weather for you."},"finish_reason":null}]}
+            """
+
+        // Then tool call chunk
+        let toolCallChunk = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_weather","type":"function","function":{"name":"get_weather","arguments":"{\\"city\\":\\"Tokyo\\"}"}}]},"finish_reason":null}]}
+            """
+
+        let contentResult = try handler.processStreamData(contentChunk.data(using: .utf8)!)
+        let toolCallResult = try handler.processStreamData(toolCallChunk.data(using: .utf8)!)
+
+        #expect(contentResult?.first?.choices.first?.delta.content == "Let me check the weather for you.")
+        #expect(toolCallResult?.first?.choices.first?.delta.toolCalls?.first?.function.name == "get_weather")
     }
 }

@@ -135,12 +135,17 @@ internal actor AdvancedStreamingHandler {
         do {
             let decoder = JSONDecoder()
             let chunk = try decoder.decode(ChatCompletionStreamResponse.self, from: jsonData)
-            
+
             // Accumulate content
             if let content = chunk.choices.first?.delta.content {
                 accumulatedContent += content
             }
-            
+
+            // Check for finish reason to mark stream as complete
+            if let finishReason = chunk.choices.first?.finishReason, !finishReason.isEmpty {
+                isComplete = true
+            }
+
             return chunk
         } catch {
             throw OpenAIResponseError.decodingError(error)
