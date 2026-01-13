@@ -1,13 +1,13 @@
 {
-  "originHash" : "9c9877de42a7881ab4d960e8b17dc9ddf3e9bccc534ffd557f9d6f0b0859fc1c",
+  "originHash" : "095dbc671ec6bfc53d12b615a82877c064dfc57e877317a630e0e9f88ce3476a",
   "pins" : [
     {
       "identity" : "openfoundationmodels",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/1amageek/OpenFoundationModels.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "b473875608da5bf948aa2c8d07fbe3b6c7c4ccd7"
+        "revision" : "9959f60f567bcf38e75796216a50a4affc41691b",
+        "version" : "1.0.3"
       }
     },
     {
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftlang/swift-syntax.git",
       "state" : {
-        "revision" : "0687f71944021d616d34d922343dcef086855920",
-        "version" : "600.0.1"
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
       }
     }
   ],
