@@ -1,105 +1,98 @@
 import Foundation
 
-// MARK: - Unified OpenAI Model
-public enum OpenAIModel: String, CaseIterable, Sendable {
-    // GPT Family Models
-    case gpt4o = "gpt-4o"
-    case gpt4oMini = "gpt-4o-mini"
-    case gpt4Turbo = "gpt-4-turbo"
-    
+// MARK: - String-based OpenAI Model
+
+/// OpenAI Model identifier supporting both predefined and custom models
+public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
+
+    /// The model identifier string used in API requests
+    public let id: String
+
+    /// Model type hint for parameter handling
+    public let modelType: ModelType
+
+    // MARK: - Initialization
+
+    /// Initialize with a model ID string and optional type hint
+    public init(_ id: String, type: ModelType? = nil) {
+        self.id = id
+        self.modelType = type ?? Self.inferModelType(from: id)
+    }
+
+    /// Initialize from string literal
+    public init(stringLiteral value: String) {
+        self.init(value)
+    }
+
+    // MARK: - Predefined Models
+
+    // GPT-4.1 Family (Latest)
+    public static let gpt41 = OpenAIModel("gpt-4.1", type: .gpt)
+    public static let gpt41Mini = OpenAIModel("gpt-4.1-mini", type: .gpt)
+    public static let gpt41Nano = OpenAIModel("gpt-4.1-nano", type: .gpt)
+
+    // GPT-4o Family
+    public static let gpt4o = OpenAIModel("gpt-4o", type: .gpt)
+    public static let gpt4oMini = OpenAIModel("gpt-4o-mini", type: .gpt)
+
+    // GPT-4 Turbo
+    public static let gpt4Turbo = OpenAIModel("gpt-4-turbo", type: .gpt)
+
     // Reasoning Family Models (o-series)
-    case o1 = "o1"
-    case o1Pro = "o1-pro"
-    case o3 = "o3"
-    case o3Pro = "o3-pro"
-    case o4Mini = "o4-mini"
-    
+    public static let o1 = OpenAIModel("o1", type: .reasoning)
+    public static let o1Pro = OpenAIModel("o1-pro", type: .reasoning)
+    public static let o3 = OpenAIModel("o3", type: .reasoning)
+    public static let o3Pro = OpenAIModel("o3-pro", type: .reasoning)
+    public static let o3Mini = OpenAIModel("o3-mini", type: .reasoning)
+    public static let o4Mini = OpenAIModel("o4-mini", type: .reasoning)
+
     // MARK: - Model Properties
-    
-    /// API name used in requests
+
+    /// API name used in requests (same as id)
     public var apiName: String {
-        return rawValue
+        return id
     }
-    
-    /// Context window size in tokens
+
+    /// Context window size in tokens (estimated based on model type)
     public var contextWindow: Int {
-        switch self {
-        case .gpt4o, .gpt4oMini, .gpt4Turbo:
+        // GPT-4.1 series has larger context
+        if id.hasPrefix("gpt-4.1") {
+            return 1_047_576  // ~1M tokens
+        }
+
+        switch modelType {
+        case .gpt:
             return 128_000
-        case .o1, .o1Pro, .o3, .o3Pro, .o4Mini:
-            return 200_000 // Reasoning models typically have larger context
+        case .reasoning:
+            return 200_000
         }
     }
-    
-    /// Maximum output tokens
+
+    /// Maximum output tokens (estimated based on model type)
     public var maxOutputTokens: Int {
-        switch self {
-        case .gpt4o, .gpt4oMini:
-            return 16_384
-        case .gpt4Turbo:
-            return 4_096
-        case .o1, .o3:
+        // GPT-4.1 series has larger output
+        if id.hasPrefix("gpt-4.1") {
             return 32_768
-        case .o1Pro, .o3Pro:
-            return 65_536
-        case .o4Mini:
+        }
+
+        switch modelType {
+        case .gpt:
             return 16_384
+        case .reasoning:
+            return 100_000
         }
     }
-    
+
     /// Model capabilities
     public var capabilities: ModelCapabilities {
         switch modelType {
         case .gpt:
-            switch self {
-            case .gpt4o, .gpt4Turbo:
-                return [.textGeneration, .vision, .functionCalling, .streaming, .toolAccess]
-            case .gpt4oMini:
-                return [.textGeneration, .vision, .functionCalling, .streaming]
-            default:
-                return [.textGeneration, .functionCalling, .streaming]
-            }
+            return [.textGeneration, .vision, .functionCalling, .streaming, .toolAccess]
         case .reasoning:
             return [.textGeneration, .reasoning, .functionCalling, .streaming, .toolAccess]
         }
     }
-    
-    /// Pricing tier
-    public var pricingTier: PricingTier {
-        switch self {
-        case .gpt4oMini, .o4Mini:
-            return .economy
-        case .gpt4o, .gpt4Turbo, .o1, .o3:
-            return .standard
-        case .o1Pro, .o3Pro:
-            return .premium
-        }
-    }
-    
-    /// Knowledge cutoff date
-    public var knowledgeCutoff: String {
-        switch self {
-        case .gpt4o, .gpt4oMini:
-            return "October 2023"
-        case .gpt4Turbo:
-            return "April 2024"
-        case .o1, .o1Pro, .o3, .o3Pro, .o4Mini:
-            return "October 2023"
-        }
-    }
-    
-    // MARK: - Internal Properties
-    
-    /// Internal model type for behavior switching
-    internal var modelType: ModelType {
-        switch self {
-        case .gpt4o, .gpt4oMini, .gpt4Turbo:
-            return .gpt
-        case .o1, .o1Pro, .o3, .o3Pro, .o4Mini:
-            return .reasoning
-        }
-    }
-    
+
     /// Internal parameter constraints
     internal var constraints: ParameterConstraints {
         switch modelType {
@@ -127,32 +120,49 @@ public enum OpenAIModel: String, CaseIterable, Sendable {
             )
         }
     }
-    
+
     /// Check if model supports vision
     public var supportsVision: Bool {
         return capabilities.contains(.vision)
     }
-    
+
     /// Check if model supports function calling
     public var supportsFunctionCalling: Bool {
         return capabilities.contains(.functionCalling)
     }
-    
+
     /// Check if model supports streaming
     public var supportsStreaming: Bool {
         return capabilities.contains(.streaming)
     }
-    
+
     /// Check if model is a reasoning model
     public var isReasoningModel: Bool {
-        return capabilities.contains(.reasoning)
+        return modelType == .reasoning
+    }
+
+    // MARK: - Model Type Inference
+
+    /// Infer model type from model ID string
+    private static func inferModelType(from id: String) -> ModelType {
+        let lowercased = id.lowercased()
+
+        // Reasoning models: o1, o3, o4 series
+        if lowercased.hasPrefix("o1") ||
+           lowercased.hasPrefix("o3") ||
+           lowercased.hasPrefix("o4") {
+            return .reasoning
+        }
+
+        // Default to GPT for all other models
+        return .gpt
     }
 }
 
 // MARK: - Supporting Types
 
-/// Internal model type for implementation switching
-internal enum ModelType: Sendable {
+/// Model type for implementation switching
+public enum ModelType: String, Sendable, Hashable {
     case gpt
     case reasoning
 }
@@ -160,11 +170,11 @@ internal enum ModelType: Sendable {
 /// Model capabilities using OptionSet
 public struct ModelCapabilities: OptionSet, Sendable {
     public let rawValue: Int
-    
+
     public init(rawValue: Int) {
         self.rawValue = rawValue
     }
-    
+
     public static let textGeneration = ModelCapabilities(rawValue: 1 << 0)
     public static let vision = ModelCapabilities(rawValue: 1 << 1)
     public static let functionCalling = ModelCapabilities(rawValue: 1 << 2)
@@ -190,7 +200,7 @@ public enum PricingTier: String, CaseIterable, Sendable {
     case economy = "economy"
     case standard = "standard"
     case premium = "premium"
-    
+
     public var description: String {
         switch self {
         case .economy:
@@ -203,38 +213,11 @@ public enum PricingTier: String, CaseIterable, Sendable {
     }
 }
 
-// MARK: - Model Extensions
-
-extension OpenAIModel {
-    /// Get all models of a specific type
-    internal static func models(ofType type: ModelType) -> [OpenAIModel] {
-        return allCases.filter { $0.modelType == type }
-    }
-    
-    /// Get all GPT models
-    public static var gptModels: [OpenAIModel] {
-        return models(ofType: .gpt)
-    }
-    
-    /// Get all reasoning models
-    public static var reasoningModels: [OpenAIModel] {
-        return models(ofType: .reasoning)
-    }
-    
-    /// Get models by pricing tier
-    public static func models(withPricingTier tier: PricingTier) -> [OpenAIModel] {
-        return allCases.filter { $0.pricingTier == tier }
-    }
-    
-    /// Get models with specific capability
-    public static func models(withCapability capability: ModelCapabilities) -> [OpenAIModel] {
-        return allCases.filter { $0.capabilities.contains(capability) }
-    }
-}
+// MARK: - CustomStringConvertible
 
 extension OpenAIModel: CustomStringConvertible {
     public var description: String {
-        return "\(rawValue) (\(modelType), \(pricingTier.rawValue))"
+        return "\(id) (\(modelType.rawValue))"
     }
 }
 
@@ -242,14 +225,34 @@ extension OpenAIModel: CustomDebugStringConvertible {
     public var debugDescription: String {
         return """
         OpenAIModel(
-            name: \(rawValue),
-            type: \(modelType),
+            id: \(id),
+            type: \(modelType.rawValue),
             contextWindow: \(contextWindow),
-            maxOutput: \(maxOutputTokens),
-            capabilities: \(capabilities),
-            pricingTier: \(pricingTier),
-            knowledgeCutoff: \(knowledgeCutoff)
+            maxOutput: \(maxOutputTokens)
         )
         """
+    }
+}
+
+// MARK: - Codable Support
+
+extension OpenAIModel: Codable {
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let id = try container.decode(String.self)
+        self.init(id)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(id)
+    }
+}
+
+// MARK: - Equatable (based on id only)
+
+extension OpenAIModel {
+    public static func == (lhs: OpenAIModel, rhs: OpenAIModel) -> Bool {
+        return lhs.id == rhs.id
     }
 }

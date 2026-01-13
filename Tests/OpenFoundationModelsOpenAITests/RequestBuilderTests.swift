@@ -234,7 +234,7 @@ struct RequestBuilderTests {
         #expect(type(of: reasoningBuilder) == ReasoningRequestBuilder.self, "Should create ReasoningRequestBuilder for reasoning models")
     }
     
-    @Test("Builder type selection based on model type", arguments: OpenAIModel.allCases)
+    @Test("Builder type selection based on model type", arguments: OpenAIModelInfo.allModels)
     func testBuilderSelectionForModels(model: OpenAIModel) {
         // This test verifies the logic that would be in OpenAILanguageModel init
         let builder: any RequestBuilder

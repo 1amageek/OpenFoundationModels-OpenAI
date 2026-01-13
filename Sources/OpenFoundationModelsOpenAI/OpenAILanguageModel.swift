@@ -18,6 +18,8 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     // MARK: - Initialization
+
+    /// Initialize with configuration and model
     public init(
         configuration: OpenAIConfiguration,
         model: OpenAIModel
@@ -34,6 +36,14 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             self.responseHandler = ReasoningResponseHandler()
         }
         self.rateLimiter = RateLimiter(configuration: configuration.rateLimits)
+    }
+
+    /// Initialize with configuration and model ID string
+    public convenience init(
+        configuration: OpenAIConfiguration,
+        model: String
+    ) {
+        self.init(configuration: configuration, model: OpenAIModel(model))
     }
     
     // MARK: - LanguageModel Protocol Implementation
@@ -264,11 +274,10 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     public var modelInfo: ModelInfo {
         return ModelInfo(
             name: model.apiName,
+            modelType: model.modelType,
             contextWindow: model.contextWindow,
             maxOutputTokens: model.maxOutputTokens,
             capabilities: model.capabilities,
-            pricingTier: model.pricingTier,
-            knowledgeCutoff: model.knowledgeCutoff,
             supportsVision: model.supportsVision,
             supportsFunctionCalling: model.supportsFunctionCalling,
             isReasoningModel: model.isReasoningModel
@@ -437,11 +446,10 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
 // MARK: - Model Information
 public struct ModelInfo: Sendable {
     public let name: String
+    public let modelType: ModelType
     public let contextWindow: Int
     public let maxOutputTokens: Int
     public let capabilities: ModelCapabilities
-    public let pricingTier: PricingTier
-    public let knowledgeCutoff: String
     public let supportsVision: Bool
     public let supportsFunctionCalling: Bool
     public let isReasoningModel: Bool

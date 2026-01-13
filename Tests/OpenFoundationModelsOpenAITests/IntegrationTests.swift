@@ -390,7 +390,7 @@ struct IntegrationTests {
 
     @Test("Correct request builder is used for each model type")
     func testModelRequestBuilderSelection() {
-        for model in OpenAIModel.allCases {
+        for model in OpenAIModelInfo.allModels {
             switch model.modelType {
             case .gpt:
                 // GPT models should use GPTRequestBuilder

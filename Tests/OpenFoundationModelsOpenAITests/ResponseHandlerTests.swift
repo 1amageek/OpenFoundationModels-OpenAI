@@ -211,7 +211,7 @@ struct ResponseHandlerTests {
         #expect(type(of: reasoningHandler) == ReasoningResponseHandler.self, "Should create ReasoningResponseHandler for reasoning models")
     }
     
-    @Test("Handler type selection based on model type", arguments: OpenAIModel.allCases)
+    @Test("Handler type selection based on model type", arguments: OpenAIModelInfo.allModels)
     func testHandlerSelectionForModels(model: OpenAIModel) {
         // This test verifies the logic that would be in OpenAILanguageModel init
         let handler: any ResponseHandler
