@@ -24,11 +24,6 @@ internal struct TranscriptConverter {
             let encoder = JSONEncoder()
             let data = try encoder.encode(transcript)
             
-            #if DEBUG
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("Transcript JSON: \(jsonString.prefix(500))...")
-            }
-            #endif
             
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let entries = json["entries"] as? [[String: Any]] else {

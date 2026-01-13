@@ -444,11 +444,4 @@ internal extension Array where Element == ChatMessage {
     static func from(prompt: String) -> [ChatMessage] {
         return [ChatMessage.user(prompt)]
     }
-    
-    static func from(prompt: Prompt) -> [ChatMessage] {
-        // OpenFoundationModels Prompt has a content property accessible via description
-        // Currently supports text-only content (multimodal support planned)
-        let combinedText = prompt.description
-        return [ChatMessage.user(combinedText)]
-    }
 }

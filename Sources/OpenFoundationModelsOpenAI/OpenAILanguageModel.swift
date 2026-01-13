@@ -144,11 +144,12 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                                                     }
                                                 }
                                             } else if let content = delta.content {
-                                                // Regular content
+                                                // Regular content - yield only the delta
+                                                // LanguageModelSession will accumulate the content
                                                 accumulatedContent += content
                                                 let responseEntry = Transcript.Response(
                                                     assetIDs: [],
-                                                    segments: [.text(Transcript.TextSegment(content: accumulatedContent))]
+                                                    segments: [.text(Transcript.TextSegment(content: content))]
                                                 )
                                                 continuation.yield(.response(responseEntry))
                                             }
