@@ -243,15 +243,20 @@ struct RequestBuilderTests {
             builder = GPTRequestBuilder()
         case .reasoning:
             builder = ReasoningRequestBuilder()
+        case .deepseek:
+            builder = GPTRequestBuilder() // DeepSeek uses GPT builder
         }
-        
+
         switch model.modelType {
         case .gpt:
-            #expect(type(of: builder) == GPTRequestBuilder.self, 
+            #expect(type(of: builder) == GPTRequestBuilder.self,
                    "Should create GPTRequestBuilder for GPT model \(model.apiName)")
         case .reasoning:
-            #expect(type(of: builder) == ReasoningRequestBuilder.self, 
+            #expect(type(of: builder) == ReasoningRequestBuilder.self,
                    "Should create ReasoningRequestBuilder for reasoning model \(model.apiName)")
+        case .deepseek:
+            #expect(type(of: builder) == GPTRequestBuilder.self,
+                   "Should create GPTRequestBuilder for DeepSeek model \(model.apiName)")
         }
     }
     

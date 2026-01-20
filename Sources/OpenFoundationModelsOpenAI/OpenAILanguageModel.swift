@@ -34,6 +34,10 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         case .reasoning:
             self.requestBuilder = ReasoningRequestBuilder()
             self.responseHandler = ReasoningResponseHandler()
+        case .deepseek:
+            // DeepSeek uses similar API to GPT models
+            self.requestBuilder = GPTRequestBuilder()
+            self.responseHandler = GPTResponseHandler()
         }
         self.rateLimiter = RateLimiter(configuration: configuration.rateLimits)
     }
@@ -52,7 +56,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             // Use TranscriptConverter for all conversions
             let messages = TranscriptConverter.buildMessages(from: transcript)
             let tools = TranscriptConverter.extractTools(from: transcript)
-            let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+            let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript, for: model)
             let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
             
             // Build request with response format if present
@@ -97,7 +101,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         // Use TranscriptConverter for all conversions
                         let messages = TranscriptConverter.buildMessages(from: transcript)
                         let tools = TranscriptConverter.extractTools(from: transcript)
-                        let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+                        let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript, for: model)
                         let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
 
                         let request = try buildChatRequestWithFormat(
@@ -342,11 +346,16 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
     
     /// Convert GenerationSchema to ResponseFormat
     private func convertSchemaToResponseFormat(_ schema: GenerationSchema) -> ResponseFormat {
+        // For models that don't support json_schema (like DeepSeek), fallback to json mode
+        if model.modelType == .deepseek {
+            return .json
+        }
+
         // Encode GenerationSchema to get JSON Schema
         do {
             let encoder = JSONEncoder()
             let schemaData = try encoder.encode(schema)
-            
+
             // Convert to JSON dictionary
             if let schemaJson = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] {
                 // Transform to OpenAI's expected JSON Schema format
@@ -356,7 +365,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
         } catch {
             print("Warning: Failed to convert GenerationSchema to ResponseFormat: \(error)")
         }
-        
+
         // Fallback to JSON mode
         return .json
     }

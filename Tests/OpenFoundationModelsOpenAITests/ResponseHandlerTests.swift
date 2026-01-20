@@ -220,15 +220,20 @@ struct ResponseHandlerTests {
             handler = GPTResponseHandler()
         case .reasoning:
             handler = ReasoningResponseHandler()
+        case .deepseek:
+            handler = GPTResponseHandler() // DeepSeek uses GPT handler
         }
-        
+
         switch model.modelType {
         case .gpt:
-            #expect(type(of: handler) == GPTResponseHandler.self, 
+            #expect(type(of: handler) == GPTResponseHandler.self,
                    "Should create GPTResponseHandler for GPT model \(model.apiName)")
         case .reasoning:
-            #expect(type(of: handler) == ReasoningResponseHandler.self, 
+            #expect(type(of: handler) == ReasoningResponseHandler.self,
                    "Should create ReasoningResponseHandler for reasoning model \(model.apiName)")
+        case .deepseek:
+            #expect(type(of: handler) == GPTResponseHandler.self,
+                   "Should create GPTResponseHandler for DeepSeek model \(model.apiName)")
         }
     }
     

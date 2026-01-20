@@ -402,6 +402,11 @@ struct IntegrationTests {
                 let builder = ReasoningRequestBuilder()
                 #expect(type(of: builder) == ReasoningRequestBuilder.self,
                        "Model \(model.apiName) should use ReasoningRequestBuilder")
+            case .deepseek:
+                // DeepSeek models should use GPTRequestBuilder
+                let builder = GPTRequestBuilder()
+                #expect(type(of: builder) == GPTRequestBuilder.self,
+                       "Model \(model.apiName) should use GPTRequestBuilder")
             }
         }
     }
