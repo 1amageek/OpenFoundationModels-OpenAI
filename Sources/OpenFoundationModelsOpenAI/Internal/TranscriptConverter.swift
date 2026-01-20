@@ -435,46 +435,58 @@ internal struct TranscriptConverter {
     }
     
     /// Extract response format with full JSON Schema from the most recent prompt
-    static func extractResponseFormatWithSchema(from transcript: Transcript) -> ResponseFormat? {
+    static func extractResponseFormatWithSchema(from transcript: Transcript, for model: OpenAIModel) -> ResponseFormat? {
         // Try JSON-based extraction to get complete schema
-        return extractResponseFormatFromJSON(transcript)
+        return extractResponseFormatFromJSON(transcript, for: model)
     }
     
     /// Extract response format by encoding Transcript to JSON
     private static func extractResponseFormatFromJSON(_ transcript: Transcript) -> ResponseFormat? {
+        // For backward compatibility, default to GPT model behavior
+        // This method is used by extractResponseFormat which doesn't have model context
+        return extractResponseFormatFromJSON(transcript, for: OpenAIModel("gpt-4o"))
+    }
+
+    /// Extract response format by encoding Transcript to JSON
+    private static func extractResponseFormatFromJSON(_ transcript: Transcript, for model: OpenAIModel) -> ResponseFormat? {
         do {
             // Encode transcript to JSON
             let encoder = JSONEncoder()
             let data = try encoder.encode(transcript)
-            
+
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let entries = json["entries"] as? [[String: Any]] else {
                 return nil
             }
-            
+
             // Look for the most recent prompt with responseFormat
             for entry in entries.reversed() {
                 if entry["type"] as? String == "prompt",
                    let responseFormat = entry["responseFormat"] as? [String: Any] {
-                    
+
                     #if DEBUG
                     print("Found response format in JSON: \(responseFormat)")
                     #endif
-                    
+
                     // Check if there's a schema (now available with updated OpenFoundationModels)
                     if let schema = responseFormat["schema"] as? [String: Any] {
-                        // Transform schema to OpenAI's expected format
-                        let transformedSchema = transformToOpenAIJSONSchema(schema)
-                        return .jsonSchema(transformedSchema)
+                        // For models that don't support json_schema (like DeepSeek), fallback to json mode
+                        if model.modelType == .deepseek {
+                            return .json
+                        } else {
+                            // Transform schema to OpenAI's expected format
+                            let transformedSchema = transformToOpenAIJSONSchema(schema)
+                            return .jsonSchema(transformedSchema)
+                        }
                     }
-                    
+
                     // If there's a name or type field, we know JSON is expected
                     if responseFormat["name"] != nil || responseFormat["type"] != nil {
                         return .json
                     }
                 }
             }
-            
+
             return nil
         } catch {
             #if DEBUG

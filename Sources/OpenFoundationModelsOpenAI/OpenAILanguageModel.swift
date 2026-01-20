@@ -56,7 +56,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
             // Use TranscriptConverter for all conversions
             let messages = TranscriptConverter.buildMessages(from: transcript)
             let tools = TranscriptConverter.extractTools(from: transcript)
-            let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+            let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript, for: model)
             let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
             
             // Build request with response format if present
@@ -101,7 +101,7 @@ public final class OpenAILanguageModel: LanguageModel, @unchecked Sendable {
                         // Use TranscriptConverter for all conversions
                         let messages = TranscriptConverter.buildMessages(from: transcript)
                         let tools = TranscriptConverter.extractTools(from: transcript)
-                        let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+                        let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript, for: model)
                         let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
 
                         let request = try buildChatRequestWithFormat(
