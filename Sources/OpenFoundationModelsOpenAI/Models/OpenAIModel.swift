@@ -65,6 +65,8 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
             return 128_000
         case .reasoning:
             return 200_000
+        case .deepseek:
+            return 32_768  // DeepSeek models typically have 32K context
         }
     }
 
@@ -80,6 +82,8 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
             return 16_384
         case .reasoning:
             return 100_000
+        case .deepseek:
+            return 8_192  // DeepSeek models typically have 8K max output
         }
     }
 
@@ -90,6 +94,8 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
             return [.textGeneration, .vision, .functionCalling, .streaming, .toolAccess]
         case .reasoning:
             return [.textGeneration, .reasoning, .functionCalling, .streaming, .toolAccess]
+        case .deepseek:
+            return [.textGeneration, .functionCalling, .streaming, .toolAccess] // No vision or reasoning
         }
     }
 
@@ -117,6 +123,17 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
                 maxTokensParameterName: "max_completion_tokens",
                 temperatureRange: nil,
                 topPRange: nil
+            )
+        case .deepseek:
+            return ParameterConstraints(
+                supportsTemperature: true,
+                supportsTopP: true,
+                supportsFrequencyPenalty: true,
+                supportsPresencePenalty: true,
+                supportsStop: true,
+                maxTokensParameterName: "max_tokens",
+                temperatureRange: 0.0...2.0,
+                topPRange: 0.0...1.0
             )
         }
     }
@@ -154,6 +171,11 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
             return .reasoning
         }
 
+        // DeepSeek models
+        if lowercased.contains("deepseek") {
+            return .deepseek
+        }
+
         // Default to GPT for all other models
         return .gpt
     }
@@ -165,6 +187,7 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
 public enum ModelType: String, Sendable, Hashable {
     case gpt
     case reasoning
+    case deepseek
 }
 
 /// Model capabilities using OptionSet
