@@ -3,16 +3,16 @@ import Foundation
 // MARK: - Helper Types
 public final class Box<T>: Codable, Sendable where T: Codable & Sendable {
     public let value: T
-
+    
     public init(_ value: T) {
         self.value = value
     }
-
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         self.value = try container.decode(T.self)
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(value)
@@ -26,13 +26,12 @@ public enum ResponseFormat: Codable, @unchecked Sendable {
     case text
     case json
     case jsonSchema([String: Any])
-
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-
+        
         if let type = try? container.decode([String: String].self),
-            let formatType = type["type"]
-        {
+           let formatType = type["type"] {
             switch formatType {
             case "text":
                 self = .text
@@ -47,10 +46,10 @@ public enum ResponseFormat: Codable, @unchecked Sendable {
             self = .text
         }
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-
+        
         switch self {
         case .text:
             try container.encode(["type": "text"])
@@ -63,8 +62,8 @@ public enum ResponseFormat: Codable, @unchecked Sendable {
                 "json_schema": [
                     "name": "response",
                     "strict": true,
-                    "schema": schema,
-                ],
+                    "schema": schema
+                ]
             ]
             // Convert to AnyCodable for encoding
             try container.encode(AnyCodable(responseFormat))
@@ -77,14 +76,14 @@ public enum ResponseFormat: Codable, @unchecked Sendable {
 /// Helper type for encoding/decoding Any values
 private struct AnyCodable: Codable {
     let value: Any
-
+    
     init(_ value: Any) {
         self.value = value
     }
-
+    
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-
+        
         if let bool = try? container.decode(Bool.self) {
             value = bool
         } else if let int = try? container.decode(Int.self) {
@@ -101,10 +100,10 @@ private struct AnyCodable: Codable {
             value = NSNull()
         }
     }
-
+    
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-
+        
         switch value {
         case let bool as Bool:
             try container.encode(bool)
@@ -124,7 +123,6 @@ private struct AnyCodable: Codable {
             try container.encode(String(describing: value))
         }
     }
-
 }
 
 // MARK: - Chat Completion Request
@@ -143,7 +141,7 @@ public struct ChatCompletionRequest: Codable, Sendable {
     public let toolChoice: ToolChoice?
     public let responseFormat: ResponseFormat?
     public let user: String?
-
+    
     public init(
         model: String,
         messages: [ChatMessage],
@@ -175,7 +173,7 @@ public struct ChatCompletionRequest: Codable, Sendable {
         self.responseFormat = responseFormat
         self.user = user
     }
-
+    
     enum CodingKeys: String, CodingKey {
         case model, messages, temperature, stop, stream, tools, user
         case topP = "top_p"
@@ -195,7 +193,7 @@ public struct ChatMessage: Codable, Sendable {
     public let name: String?
     public let toolCalls: [OpenAIToolCall]?
     public let toolCallId: String?
-
+    
     public init(
         role: Role,
         content: Content? = nil,
@@ -209,33 +207,32 @@ public struct ChatMessage: Codable, Sendable {
         self.toolCalls = toolCalls
         self.toolCallId = toolCallId
     }
-
+    
     public enum Role: String, Codable, Sendable {
         case system, user, assistant, tool
     }
-
+    
     public enum Content: Codable, Sendable {
         case text(String)
         case multimodal([ContentPart])
-
+        
         public init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
-
+            
             if let text = try? container.decode(String.self) {
                 self = .text(text)
             } else if let parts = try? container.decode([ContentPart].self) {
                 self = .multimodal(parts)
             } else {
                 throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: decoder.codingPath, debugDescription: "Invalid content format")
+                    DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid content format")
                 )
             }
         }
-
+        
         public func encode(to encoder: Encoder) throws {
             var container = encoder.singleValueContainer()
-
+            
             switch self {
             case .text(let text):
                 try container.encode(text)
@@ -243,7 +240,7 @@ public struct ChatMessage: Codable, Sendable {
                 try container.encode(parts)
             }
         }
-
+        
         public var text: String? {
             switch self {
             case .text(let text):
@@ -258,7 +255,7 @@ public struct ChatMessage: Codable, Sendable {
             }
         }
     }
-
+    
     enum CodingKeys: String, CodingKey {
         case role, content, name
         case toolCalls = "tool_calls"
@@ -271,88 +268,87 @@ public enum ContentPart: Codable, Sendable {
     case text(TextPart)
     case image(ImagePart)
     case audio(AudioPart)
-
+    
     public struct TextPart: Codable, Sendable {
         public let type: String
         public let text: String
-
+        
         public init(text: String) {
             self.type = "text"
             self.text = text
         }
-
+        
         private enum CodingKeys: String, CodingKey {
             case type, text
         }
-
+        
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.type = try container.decodeIfPresent(String.self, forKey: .type) ?? "text"
             self.text = try container.decode(String.self, forKey: .text)
         }
     }
-
+    
     public struct ImagePart: Codable, Sendable {
         public let type = "image_url"
         public let imageUrl: ImageURL
-
+        
         public init(imageUrl: ImageURL) {
             self.imageUrl = imageUrl
         }
-
+        
         public struct ImageURL: Codable, Sendable {
             public let url: String
             public let detail: Detail?
-
+            
             public init(url: String, detail: Detail? = nil) {
                 self.url = url
                 self.detail = detail
             }
-
+            
             public enum Detail: String, Codable, Sendable {
                 case auto, low, high
             }
         }
-
+        
         enum CodingKeys: String, CodingKey {
             case type
             case imageUrl = "image_url"
         }
     }
-
+    
     public struct AudioPart: Codable, Sendable {
         public let type = "input_audio"
         public let inputAudio: InputAudio
-
+        
         public init(inputAudio: InputAudio) {
             self.inputAudio = inputAudio
         }
-
+        
         public struct InputAudio: Codable, Sendable {
-            public let data: String  // base64 encoded
+            public let data: String // base64 encoded
             public let format: Format
-
+            
             public init(data: String, format: Format) {
                 self.data = data
                 self.format = format
             }
-
+            
             public enum Format: String, Codable, Sendable {
                 case wav, mp3, flac, m4a, ogg, oga, webm
             }
         }
-
+        
         enum CodingKeys: String, CodingKey {
             case type
             case inputAudio = "input_audio"
         }
     }
-
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DynamicCodingKeys.self)
-        let type = try container.decode(
-            String.self, forKey: DynamicCodingKeys(stringValue: "type")!)
-
+        let type = try container.decode(String.self, forKey: DynamicCodingKeys(stringValue: "type")!)
+        
         switch type {
         case "text":
             let textPart = try TextPart(from: decoder)
@@ -365,13 +361,11 @@ public enum ContentPart: Codable, Sendable {
             self = .audio(audioPart)
         default:
             throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "Unknown content part type: \(type)")
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unknown content part type: \(type)")
             )
         }
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         switch self {
         case .text(let textPart):
@@ -388,27 +382,27 @@ public enum ContentPart: Codable, Sendable {
 public struct Tool: Codable, Sendable {
     public let type: String
     public let function: Function
-
+    
     public init(function: Function) {
         self.type = "function"
         self.function = function
     }
-
+    
     private enum CodingKeys: String, CodingKey {
         case type, function
     }
-
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.type = try container.decodeIfPresent(String.self, forKey: .type) ?? "function"
         self.function = try container.decode(Function.self, forKey: .function)
     }
-
+    
     public struct Function: Codable, Sendable {
         public let name: String
         public let description: String?
         public let parameters: JSONSchema
-
+        
         public init(name: String, description: String? = nil, parameters: JSONSchema) {
             self.name = name
             self.description = description
@@ -422,10 +416,10 @@ public enum ToolChoice: Codable, Sendable {
     case auto
     case required
     case function(String)
-
+    
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-
+        
         if let string = try? container.decode(String.self) {
             switch string {
             case "none": self = .none
@@ -433,27 +427,23 @@ public enum ToolChoice: Codable, Sendable {
             case "required": self = .required
             default:
                 throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: decoder.codingPath,
-                        debugDescription: "Invalid tool choice: \(string)")
+                    DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid tool choice: \(string)")
                 )
             }
         } else if let object = try? container.decode([String: [String: String]].self),
-            let function = object["function"],
-            let name = function["name"]
-        {
+                  let function = object["function"],
+                  let name = function["name"] {
             self = .function(name)
         } else {
             throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: decoder.codingPath, debugDescription: "Invalid tool choice format")
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid tool choice format")
             )
         }
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-
+        
         switch self {
         case .none:
             try container.encode("none")
@@ -465,12 +455,12 @@ public enum ToolChoice: Codable, Sendable {
             struct FunctionChoice: Codable {
                 let type: String
                 let function: FunctionName
-
+                
                 init(function: FunctionName) {
                     self.type = "function"
                     self.function = function
                 }
-
+                
                 struct FunctionName: Codable {
                     let name: String
                 }
@@ -485,17 +475,17 @@ public struct OpenAIToolCall: Codable, Sendable {
     public let id: String
     public let type: String
     public let function: FunctionCall
-
+    
     public init(id: String, type: String = "function", function: FunctionCall) {
         self.id = id
         self.type = type
         self.function = function
     }
-
+    
     public struct FunctionCall: Codable, Sendable {
         public let name: String
         public let arguments: String
-
+        
         public init(name: String, arguments: String) {
             self.name = name
             self.arguments = arguments
@@ -509,7 +499,7 @@ public struct JSONSchema: Codable, Sendable {
     public let properties: [String: JSONSchemaProperty]?
     public let required: [String]?
     public let description: String?
-
+    
     public init(
         type: String,
         properties: [String: JSONSchemaProperty]? = nil,
@@ -530,7 +520,7 @@ public struct JSONSchemaProperty: Codable, Sendable {
     public let minimum: Double?
     public let maximum: Double?
     public let items: Box<JSONSchemaProperty>?
-
+    
     public init(
         type: String,
         description: String? = nil,
@@ -546,7 +536,7 @@ public struct JSONSchemaProperty: Codable, Sendable {
         self.maximum = maximum
         self.items = items.map(Box.init)
     }
-
+    
     enum CodingKeys: String, CodingKey {
         case type, description, minimum, maximum, items
         case enumValues = "enum"
@@ -562,24 +552,24 @@ public struct ChatCompletionResponse: Codable, Sendable {
     public let choices: [Choice]
     public let usage: Usage?
     public let systemFingerprint: String?
-
+    
     public struct Choice: Codable, Sendable {
         public let index: Int
         public let message: ChatMessage
         public let finishReason: String?
-
+        
         enum CodingKeys: String, CodingKey {
             case index, message
             case finishReason = "finish_reason"
         }
     }
-
+    
     public struct Usage: Codable, Sendable {
         public let promptTokens: Int
         public let completionTokens: Int?
         public let totalTokens: Int
-        public let reasoningTokens: Int?  // For reasoning models
-
+        public let reasoningTokens: Int? // For reasoning models
+        
         enum CodingKeys: String, CodingKey {
             case promptTokens = "prompt_tokens"
             case completionTokens = "completion_tokens"
@@ -587,7 +577,7 @@ public struct ChatCompletionResponse: Codable, Sendable {
             case reasoningTokens = "reasoning_tokens"
         }
     }
-
+    
     enum CodingKeys: String, CodingKey {
         case id, object, created, model, choices, usage
         case systemFingerprint = "system_fingerprint"
@@ -632,8 +622,7 @@ public struct StreamingToolCall: Codable, Sendable {
     public let type: String?
     public let function: StreamingFunctionCall
 
-    public init(index: Int, id: String? = nil, type: String? = nil, function: StreamingFunctionCall)
-    {
+    public init(index: Int, id: String? = nil, type: String? = nil, function: StreamingFunctionCall) {
         self.index = index
         self.id = id
         self.type = type
@@ -655,12 +644,12 @@ public struct StreamingToolCall: Codable, Sendable {
 private struct DynamicCodingKeys: CodingKey {
     var stringValue: String
     var intValue: Int?
-
+    
     init?(stringValue: String) {
         self.stringValue = stringValue
         self.intValue = nil
     }
-
+    
     init?(intValue: Int) {
         self.stringValue = String(intValue)
         self.intValue = intValue
@@ -672,27 +661,23 @@ extension ChatMessage {
     public static func system(_ content: String) -> ChatMessage {
         return ChatMessage(role: .system, content: .text(content))
     }
-
+    
     public static func user(_ content: String) -> ChatMessage {
         return ChatMessage(role: .user, content: .text(content))
     }
-
+    
     public static func assistant(_ content: String) -> ChatMessage {
         return ChatMessage(role: .assistant, content: .text(content))
     }
-
+    
     public static func tool(content: String, toolCallId: String) -> ChatMessage {
         return ChatMessage(role: .tool, content: .text(content), toolCallId: toolCallId)
     }
-
-    public static func userWithImage(
-        text: String, imageURL: String, detail: ContentPart.ImagePart.ImageURL.Detail = .auto
-    ) -> ChatMessage {
+    
+    public static func userWithImage(text: String, imageURL: String, detail: ContentPart.ImagePart.ImageURL.Detail = .auto) -> ChatMessage {
         let parts: [ContentPart] = [
             .text(ContentPart.TextPart(text: text)),
-            .image(
-                ContentPart.ImagePart(
-                    imageUrl: ContentPart.ImagePart.ImageURL(url: imageURL, detail: detail))),
+            .image(ContentPart.ImagePart(imageUrl: ContentPart.ImagePart.ImageURL(url: imageURL, detail: detail)))
         ]
         return ChatMessage(role: .user, content: .multimodal(parts))
     }
