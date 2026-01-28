@@ -1,13 +1,13 @@
 {
-  "originHash" : "095dbc671ec6bfc53d12b615a82877c064dfc57e877317a630e0e9f88ce3476a",
+  "originHash" : "4032f14f939e2db6dbabaa6e9a7cbc702320518cc12921e6c4ce494e3b89d1ec",
   "pins" : [
     {
       "identity" : "openfoundationmodels",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/1amageek/OpenFoundationModels.git",
       "state" : {
-        "revision" : "9959f60f567bcf38e75796216a50a4affc41691b",
-        "version" : "1.0.3"
+        "revision" : "b4d33bc6241e2b6426b6a36918e044d690232635",
+        "version" : "1.1.1"
       }
     },
     {

@@ -18,10 +18,10 @@ public typealias OpenAIConfig = OpenAIConfiguration
 
 // MARK: - Convenience Initializers
 extension OpenAILanguageModel {
-    /// Initialize with API key and model (default: gpt-4.1)
+    /// Initialize with API key and model (default: gpt-5.2)
     public convenience init(
         apiKey: String,
-        model: OpenAIModel = .gpt41
+        model: OpenAIModel = .gpt52
     ) {
         let configuration = OpenAIConfiguration(apiKey: apiKey)
         self.init(configuration: configuration, model: model)
@@ -66,19 +66,39 @@ extension OpenAILanguageModel {
 // MARK: - Model Information and Utilities
 public struct OpenAIModelInfo {
 
-    /// Predefined GPT models
-    public static var gptModels: [OpenAIModel] {
+    /// GPT-5 family (latest frontier models)
+    public static var gpt5Models: [OpenAIModel] {
+        return [.gpt52, .gpt51, .gpt5, .gpt5Mini, .gpt5Nano, .gpt52Pro, .gpt5Pro]
+    }
+
+    /// GPT-5 Codex models (code-specialized)
+    public static var codexModels: [OpenAIModel] {
+        return [.gpt52Codex, .gpt51Codex, .gpt51CodexMax, .gpt51CodexMini, .gpt5Codex]
+    }
+
+    /// GPT-4 family models
+    public static var gpt4Models: [OpenAIModel] {
         return [.gpt41, .gpt41Mini, .gpt41Nano, .gpt4o, .gpt4oMini, .gpt4Turbo]
+    }
+
+    /// Predefined GPT models (all GPT families)
+    public static var gptModels: [OpenAIModel] {
+        return gpt5Models + codexModels + gpt4Models
     }
 
     /// Predefined reasoning models
     public static var reasoningModels: [OpenAIModel] {
-        return [.o1, .o1Pro, .o3, .o3Pro, .o3Mini, .o4Mini]
+        return [.o3Pro, .o3, .o3Mini, .o4Mini, .o3DeepResearch, .o4MiniDeepResearch, .o1Pro, .o1, .o1Mini]
     }
 
     /// All predefined models
     public static var allModels: [OpenAIModel] {
         return gptModels + reasoningModels
+    }
+
+    /// Frontier models (recommended for most tasks)
+    public static var frontierModels: [OpenAIModel] {
+        return [.gpt52, .gpt5Mini, .gpt5Nano, .gpt52Pro, .gpt5, .gpt41]
     }
 
     /// Get models with specific capability
@@ -99,8 +119,8 @@ public struct OpenAIModelInfo {
 
 // MARK: - Version Information
 public struct OpenFoundationModelsOpenAI {
-    public static let version = "2.1.0"
-    public static let buildDate = "2025-01-13"
+    public static let version = "3.0.0"
+    public static let buildDate = "2025-01-15"
 
     public static var supportedModels: [OpenAIModel] {
         return OpenAIModelInfo.allModels

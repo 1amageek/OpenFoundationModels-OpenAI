@@ -4,7 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the OpenAI provider implementation for OpenFoundationModels framework. It enables using OpenAI's latest GPT and Reasoning models (GPT-4o, o1, o3, o4-mini) through Apple's Foundation Models API interface with a unified, self-contained architecture.
+This is the OpenAI provider implementation for OpenFoundationModels framework. It enables using OpenAI's latest GPT and Reasoning models through Apple's Foundation Models API interface with a unified, self-contained architecture.
+
+### Supported Models
+
+**GPT Family:**
+- GPT-4.1 series: `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` (latest, ~1M token context)
+- GPT-4o series: `gpt-4o`, `gpt-4o-mini`
+- GPT-4 Turbo: `gpt-4-turbo`
+
+**Reasoning Family (o-series):**
+- `o1`, `o1-pro`
+- `o3`, `o3-pro`, `o3-mini`
+- `o4-mini`
+
+**Custom Models:**
+- Any model via string literal: `OpenAIModel("your-custom-model")`
 
 ## Build and Development Commands
 
@@ -42,10 +57,11 @@ swift package generate-xcodeproj
    - Built-in streaming support with Server-Sent Events
    - Actor-based rate limiting and retry logic
 
-2. **OpenAIModel**: Unified model enumeration
-   - Single enum covering GPT-4o, Reasoning models (o1, o3, o4-mini)
-   - Internal model type detection for automatic parameter validation
-   - Model-specific capabilities and constraints
+2. **OpenAIModel**: String-based model identifier struct
+   - Implements `ExpressibleByStringLiteral` for flexible model selection
+   - Predefined constants for common models (`.gpt41`, `.gpt4o`, `.o3`, etc.)
+   - Automatic model type inference from ID string
+   - Model-specific capabilities and constraints via `ParameterConstraints`
 
 3. **Custom HTTP Client**: Self-contained networking layer
    - No external dependencies beyond OpenFoundationModels
@@ -63,10 +79,10 @@ When implementing the OpenAILanguageModel, ensure:
 
 1. **Protocol Conformance (Transcript-based)**:
    - `generate(transcript:options:)` - Returns `Transcript.Entry` with complete response
-   - `stream(transcript:options:)` - Returns `AsyncStream<Transcript.Entry>` for streaming
-   - `isAvailable` - Synchronous property checking API availability
-   - `supports(locale:)` - Returns true (OpenAI supports most languages)
-   - Extracts tools from `Transcript.Instructions.toolDefinitions`
+   - `stream(transcript:options:)` - Returns `AsyncThrowingStream<Transcript.Entry, Error>` for streaming
+   - `isAvailable` - Synchronous property (returns `true`)
+   - `supports(locale:)` - Returns `true` (OpenAI supports most languages)
+   - Extracts tools from `Transcript.Instructions.toolDefinitions` via `TranscriptConverter`
    - Converts `Transcript.Entry` types to OpenAI message format
 
 2. **Structured Generation**:
@@ -95,18 +111,19 @@ When implementing the OpenAILanguageModel, ensure:
 ```
 Sources/OpenFoundationModelsOpenAI/
 ├── OpenAILanguageModel.swift           # Main provider implementation
-├── OpenAIConfiguration.swift           # Configuration and model definitions
+├── OpenAIConfiguration.swift           # Configuration and rate limit settings
 ├── OpenFoundationModelsOpenAI.swift    # Public API and convenience initializers
 ├── Models/
-│   └── OpenAIModel.swift               # Unified model enum with capabilities
+│   └── OpenAIModel.swift               # String-based model struct with capabilities
 ├── HTTP/
-│   └── OpenAIHTTPClient.swift          # Custom HTTP client implementation
+│   └── OpenAIHTTPClient.swift          # Actor-based HTTP client implementation
 ├── API/
-│   └── OpenAIAPITypes.swift            # OpenAI API data structures
+│   └── OpenAIAPITypes.swift            # OpenAI API data structures (ChatMessage, Tool, etc.)
 └── Internal/
-    ├── RequestBuilders.swift           # Model-specific request builders
-    ├── ResponseHandlers.swift          # Model-specific response handlers
-    └── StreamingHandler.swift          # Advanced streaming implementation
+    ├── TranscriptConverter.swift       # Transcript to OpenAI format conversion
+    ├── RequestBuilders.swift           # GPT/Reasoning request builders
+    ├── ResponseHandlers.swift          # GPT/Reasoning response handlers
+    └── StreamingHandler.swift          # Server-Sent Events streaming
 ```
 
 ## Testing Strategy
@@ -124,7 +141,7 @@ Sources/OpenFoundationModelsOpenAI/
    - Converts Transcript entries (Instructions, Prompt, Response, ToolCalls, ToolOutput) to OpenAI format
    - Extracts tool definitions from Instructions for function calling
 
-2. **Unified Model Interface**: Single OpenAIModel enum that internally handles GPT vs Reasoning model differences, providing a seamless user experience without model-specific APIs.
+2. **Unified Model Interface**: `OpenAIModel` struct with `ExpressibleByStringLiteral` support that internally handles GPT vs Reasoning model differences, providing flexible model selection via predefined constants or custom strings.
 
 3. **Self-Contained Architecture**: No external dependencies beyond OpenFoundationModels, using custom URLSession-based HTTP client for maximum flexibility and control.
 
@@ -143,54 +160,44 @@ The OpenAI provider now fully supports OpenFoundationModels' Transcript-based in
 
 ### Transcript to OpenAI Message Conversion
 
+The `TranscriptConverter` utility handles all conversion between OpenFoundationModels Transcript format and OpenAI API format:
+
 ```swift
-// Convert Transcript entries to OpenAI ChatMessage format
-internal extension Array where Element == ChatMessage {
-    static func from(transcript: Transcript) -> [ChatMessage] {
-        var messages: [ChatMessage] = []
-        
-        for entry in transcript.entries {
-            switch entry {
-            case .instructions(let instructions):
-                // System message with instructions
-                let content = extractText(from: instructions.segments)
-                messages.append(ChatMessage.system(content))
-                
-            case .prompt(let prompt):
-                // User message
-                let content = extractText(from: prompt.segments)
-                messages.append(ChatMessage.user(content))
-                
-            case .response(let response):
-                // Assistant message
-                let content = extractText(from: response.segments)
-                messages.append(ChatMessage.assistant(content))
-                
-            case .toolCalls:
-                // Tool execution (placeholder for now)
-                messages.append(ChatMessage.assistant("Tool calls executed"))
-                
-            case .toolOutput(let toolOutput):
-                // Tool result
-                messages.append(ChatMessage.system("Tool output: \(toolOutput.toolName)"))
-            }
-        }
-        return messages
+// TranscriptConverter provides static methods for transcript conversion
+internal struct TranscriptConverter {
+
+    /// Build OpenAI messages from Transcript
+    static func buildMessages(from transcript: Transcript) -> [ChatMessage] {
+        // Uses JSON-based extraction with fallback to entry-based extraction
+        // Handles all entry types: instructions, prompt, response, toolCalls, toolOutput
+    }
+
+    /// Extract tool definitions from Transcript
+    static func extractTools(from transcript: Transcript) -> [Tool]? {
+        // Extracts toolDefinitions from Instructions entry
+        // Converts Transcript.ToolDefinition to OpenAI Tool format
+    }
+
+    /// Extract response format for structured generation
+    static func extractResponseFormatWithSchema(from transcript: Transcript) -> ResponseFormat? {
+        // Extracts JSON Schema from Prompt's responseFormat if present
+    }
+
+    /// Extract generation options from the most recent prompt
+    static func extractOptions(from transcript: Transcript) -> GenerationOptions? {
+        // Returns options from the most recent prompt entry
     }
 }
 ```
 
-### Tool Extraction from Transcript
+### Usage in OpenAILanguageModel
 
 ```swift
-private func extractTools(from transcript: Transcript) -> [Transcript.ToolDefinition]? {
-    for entry in transcript.entries {
-        if case .instructions(let instructions) = entry {
-            return instructions.toolDefinitions
-        }
-    }
-    return nil
-}
+// In generate method:
+let messages = TranscriptConverter.buildMessages(from: transcript)
+let tools = TranscriptConverter.extractTools(from: transcript)
+let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
 ```
 
 ### Key Benefits
@@ -210,7 +217,7 @@ The current implementation correctly conforms to the LanguageModel protocol from
 ```swift
 public protocol LanguageModel: Sendable {
     func generate(transcript: Transcript, options: GenerationOptions?) async throws -> Transcript.Entry
-    func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<Transcript.Entry>
+    func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncThrowingStream<Transcript.Entry, Error>
     var isAvailable: Bool { get }
     func supports(locale: Locale) -> Bool
 }
@@ -218,14 +225,21 @@ public protocol LanguageModel: Sendable {
 
 **Implementation Status**:
 - ✅ `generate(transcript:options:)` - Returns `Transcript.Entry` with complete response
-- ✅ `stream(transcript:options:)` - Returns `AsyncStream<Transcript.Entry>` for streaming
+- ✅ `stream(transcript:options:)` - Returns `AsyncThrowingStream<Transcript.Entry, Error>` for streaming
 - ✅ `isAvailable` - Synchronous property (returns `true`)
 - ✅ `supports(locale:)` - Returns `true` for all locales (OpenAI supports most languages)
+
+### Additional Features
+
+The implementation also provides extended capabilities:
+- `generate(transcript:schema:options:)` - Structured output with explicit `GenerationSchema`
+- `generate(transcript:generating:options:)` - Type-safe generation for `Generable` types
+- `modelInfo` - Access to model metadata (`contextWindow`, `maxOutputTokens`, `capabilities`)
 
 ### Build Status
 
 - ✅ Build succeeds: `swift build` completes without errors
-- ✅ All tests pass: 205 tests in 11 suites
+- ✅ All tests pass: 245 tests in 12 suites
 - ✅ No TODO/FIXME comments in source code
 
 ### Transcript Entry Types
@@ -250,6 +264,31 @@ The `TranscriptConverter` utility handles conversion between OpenFoundationModel
 - Extracts tool definitions for function calling
 - Handles response format extraction for structured generation
 - Supports JSON-based extraction with fallback methods
+- Converts `GeneratedContent` to JSON for tool call arguments
+
+### OpenAIModel
+
+The `OpenAIModel` struct provides flexible model selection:
+
+```swift
+// Using predefined constants
+let model1 = OpenAIModel.gpt41
+let model2 = OpenAIModel.o3Mini
+
+// Using string literals
+let model3: OpenAIModel = "gpt-4.1-mini"
+
+// Using explicit initialization with type hint
+let model4 = OpenAIModel("custom-fine-tuned-model", type: .gpt)
+```
+
+Model properties available:
+- `id: String` - Model identifier for API requests
+- `modelType: ModelType` - `.gpt` or `.reasoning`
+- `contextWindow: Int` - Maximum context size in tokens
+- `maxOutputTokens: Int` - Maximum output tokens
+- `capabilities: ModelCapabilities` - Feature flags (vision, functionCalling, etc.)
+- `constraints: ParameterConstraints` - API parameter support
 
 ## Remark Tool Integration
 
@@ -456,11 +495,10 @@ func testStreaming() async throws {
         .text(Transcript.TextSegment(content: "test"))
     ])))
 
-    await confirmation("Stream delivers content") { confirm in
-        for await entry in model.stream(transcript: transcript, options: nil) {
-            confirm()
-            break
-        }
+    // AsyncThrowingStream requires try-await
+    for try await entry in model.stream(transcript: transcript, options: nil) {
+        // Process entry
+        break
     }
 }
 ```
@@ -478,3 +516,110 @@ func testStreaming() async throws {
 - Performance insights guide optimization recommendations
 
 This methodology ensures high-quality, maintainable tests that provide confidence in the OpenAI provider implementation while supporting future development and debugging efforts.
+
+## Error Handling
+
+### Error Types
+
+The implementation provides structured error types:
+
+```swift
+// Model-specific errors
+public enum OpenAIModelError: Error {
+    case modelNotAvailable(String)
+    case parameterNotSupported(parameter: String, model: String)
+    case contextLengthExceeded(model: String, maxTokens: Int)
+    case invalidRequest(String)
+    case rateLimitExceeded
+    case quotaExceeded
+    case apiError(OpenAIAPIError)
+}
+
+// HTTP/Network errors
+public enum OpenAIHTTPError: Error {
+    case invalidURL(String)
+    case networkError(Error)
+    case invalidResponse
+    case statusError(Int, Data?)
+    case decodingError(Error)
+    case rateLimitExceeded(retryAfter: TimeInterval?)
+    case authenticationFailed
+    case apiError(OpenAIAPIError)
+    case timeout
+}
+```
+
+### Rate Limiting
+
+Built-in rate limiting with configurable tiers:
+
+```swift
+// Default configuration
+let config = OpenAIConfiguration(
+    apiKey: "sk-...",
+    rateLimits: .default  // 3,500 RPM, 90,000 TPM
+)
+
+// Tier-specific configurations
+.tier1   // 500 RPM, 30,000 TPM
+.tier2   // 3,500 RPM, 90,000 TPM (same as default)
+.tier3   // 10,000 RPM, 150,000 TPM
+.unlimited  // No rate limiting
+```
+
+## Quick Reference
+
+### Initialization Patterns
+
+```swift
+// Simple initialization (default: gpt-4.1)
+let model = OpenAILanguageModel(apiKey: "sk-...")
+
+// With specific model
+let model = OpenAILanguageModel(apiKey: "sk-...", model: .gpt4o)
+
+// With custom model string
+let model = OpenAILanguageModel(apiKey: "sk-...", model: "gpt-4.1-mini")
+
+// Full configuration
+let config = OpenAIConfiguration(
+    apiKey: "sk-...",
+    baseURL: URL(string: "https://api.openai.com/v1")!,
+    organization: "org-...",
+    timeout: 120.0,
+    retryPolicy: .exponentialBackoff(),
+    rateLimits: .default
+)
+let model = OpenAILanguageModel(configuration: config, model: .gpt41)
+```
+
+### Generation Examples
+
+```swift
+// Basic generation
+var transcript = Transcript()
+transcript.append(.prompt(Transcript.Prompt(segments: [
+    .text(Transcript.TextSegment(content: "Hello, world!"))
+])))
+let entry = try await model.generate(transcript: transcript, options: nil)
+
+// Streaming
+for try await entry in model.stream(transcript: transcript, options: nil) {
+    if case .response(let response) = entry {
+        // Process streamed response
+    }
+}
+
+// Structured generation with Generable type
+let (entry, result) = try await model.generate(
+    transcript: transcript,
+    generating: MyGenerableType.self
+)
+```
+
+## Version Information
+
+- **Library Version**: 2.1.0
+- **Build Date**: 2025-01-13
+- **Min Swift Version**: 6.0
+- **Dependencies**: OpenFoundationModels only

@@ -127,7 +127,7 @@ struct OpenAILanguageModelTests {
     @Test("Convenience initializer with default model")
     func testConvenienceInitializerWithDefaultModel() {
         let model = OpenAILanguageModel(apiKey: "test-key")
-        #expect(model.modelInfo.name == "gpt-4.1", "Default model should be GPT-4.1")
+        #expect(model.modelInfo.name == "gpt-5.2", "Default model should be GPT-5.2")
     }
     
     @Test("Convenience initializer with custom base URL")

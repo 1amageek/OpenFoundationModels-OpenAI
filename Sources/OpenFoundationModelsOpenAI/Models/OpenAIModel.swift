@@ -26,7 +26,23 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
 
     // MARK: - Predefined Models
 
-    // GPT-4.1 Family (Latest)
+    // GPT-5 Family (Latest Frontier Models)
+    public static let gpt52 = OpenAIModel("gpt-5.2", type: .gpt)
+    public static let gpt51 = OpenAIModel("gpt-5.1", type: .gpt)
+    public static let gpt5 = OpenAIModel("gpt-5", type: .gpt)
+    public static let gpt5Mini = OpenAIModel("gpt-5-mini", type: .gpt)
+    public static let gpt5Nano = OpenAIModel("gpt-5-nano", type: .gpt)
+    public static let gpt52Pro = OpenAIModel("gpt-5.2-pro", type: .gpt)
+    public static let gpt5Pro = OpenAIModel("gpt-5-pro", type: .gpt)
+
+    // GPT-5 Codex Family (Code-specialized)
+    public static let gpt52Codex = OpenAIModel("gpt-5.2-codex", type: .gpt)
+    public static let gpt51Codex = OpenAIModel("gpt-5.1-codex", type: .gpt)
+    public static let gpt51CodexMax = OpenAIModel("gpt-5.1-codex-max", type: .gpt)
+    public static let gpt51CodexMini = OpenAIModel("gpt-5.1-codex-mini", type: .gpt)
+    public static let gpt5Codex = OpenAIModel("gpt-5-codex", type: .gpt)
+
+    // GPT-4.1 Family
     public static let gpt41 = OpenAIModel("gpt-4.1", type: .gpt)
     public static let gpt41Mini = OpenAIModel("gpt-4.1-mini", type: .gpt)
     public static let gpt41Nano = OpenAIModel("gpt-4.1-nano", type: .gpt)
@@ -39,12 +55,15 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
     public static let gpt4Turbo = OpenAIModel("gpt-4-turbo", type: .gpt)
 
     // Reasoning Family Models (o-series)
-    public static let o1 = OpenAIModel("o1", type: .reasoning)
-    public static let o1Pro = OpenAIModel("o1-pro", type: .reasoning)
-    public static let o3 = OpenAIModel("o3", type: .reasoning)
     public static let o3Pro = OpenAIModel("o3-pro", type: .reasoning)
+    public static let o3 = OpenAIModel("o3", type: .reasoning)
     public static let o3Mini = OpenAIModel("o3-mini", type: .reasoning)
     public static let o4Mini = OpenAIModel("o4-mini", type: .reasoning)
+    public static let o3DeepResearch = OpenAIModel("o3-deep-research", type: .reasoning)
+    public static let o4MiniDeepResearch = OpenAIModel("o4-mini-deep-research", type: .reasoning)
+    public static let o1Pro = OpenAIModel("o1-pro", type: .reasoning)
+    public static let o1 = OpenAIModel("o1", type: .reasoning)
+    public static let o1Mini = OpenAIModel("o1-mini", type: .reasoning)
 
     // MARK: - Model Properties
 
@@ -55,7 +74,11 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
 
     /// Context window size in tokens (estimated based on model type)
     public var contextWindow: Int {
-        // GPT-4.1 series has larger context
+        // GPT-5 series has largest context
+        if id.hasPrefix("gpt-5") {
+            return 1_000_000  // 1M tokens
+        }
+        // GPT-4.1 series has large context
         if id.hasPrefix("gpt-4.1") {
             return 1_047_576  // ~1M tokens
         }
@@ -70,7 +93,14 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
 
     /// Maximum output tokens (estimated based on model type)
     public var maxOutputTokens: Int {
-        // GPT-4.1 series has larger output
+        // GPT-5 series
+        if id.hasPrefix("gpt-5") {
+            if id.contains("codex") || id.contains("pro") {
+                return 64_000
+            }
+            return 32_768
+        }
+        // GPT-4.1 series
         if id.hasPrefix("gpt-4.1") {
             return 32_768
         }
@@ -147,14 +177,14 @@ public struct OpenAIModel: Sendable, Hashable, ExpressibleByStringLiteral {
     private static func inferModelType(from id: String) -> ModelType {
         let lowercased = id.lowercased()
 
-        // Reasoning models: o1, o3, o4 series
+        // Reasoning models: o1, o3, o4 series (including deep-research variants)
         if lowercased.hasPrefix("o1") ||
            lowercased.hasPrefix("o3") ||
            lowercased.hasPrefix("o4") {
             return .reasoning
         }
 
-        // Default to GPT for all other models
+        // Default to GPT for all other models (gpt-5, gpt-4.1, gpt-4o, etc.)
         return .gpt
     }
 }
